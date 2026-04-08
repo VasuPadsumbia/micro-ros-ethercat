@@ -1,0 +1,3 @@
+[submodule "agent/soem"]
+	path = agent/soem
+	url = https://github.com/OpenEtherCATsociety/SOEM.git
