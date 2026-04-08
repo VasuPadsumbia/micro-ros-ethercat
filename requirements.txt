@@ -1,0 +1,26 @@
+# Core simulation and testing
+pytest>=7.4
+cocotb>=1.8,<2.0   # cocotb 2.x requires Python <=3.13; use 1.x for 3.12 compat
+cocotb-bus>=0.2
+
+# EtherCAT frame crafting (for integration tests)
+scapy>=2.5
+
+# Serial communication (firmware flashing helpers)
+pyserial>=3.5
+
+# FPGA tooling helpers
+pyftdi>=0.55.4
+
+# Binary protocol parsing
+construct>=2.10
+
+# CLI and output
+click>=8.1
+colorama>=0.4
+
+# Python EtherCAT master (for agent tests, wraps SOEM or pyrobot-ethercat)
+# pysoem>=1.1.0   # Uncomment if pysoem is available on your platform
+
+# EEPROM generation
+crcmod>=1.7

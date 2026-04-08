@@ -1,0 +1,32 @@
+# ── micro-ROS EtherCAT firmware sdkconfig defaults ───────────────────────────
+
+# Target chip
+CONFIG_IDF_TARGET="esp32"
+
+# Flash size
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+
+# SPI flash speed
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+
+# FreeRTOS tick rate (1 kHz for accurate timeouts)
+CONFIG_FREERTOS_HZ=1000
+
+# Stack sizes
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Logging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# SPI driver
+CONFIG_SPI_MASTER_IN_IRAM=y
+
+# micro-ROS memory allocator
+CONFIG_MICROROS_TRANSPORT_CUSTOM=y
+
+# Disable unused subsystems to save RAM
+CONFIG_ESP_WIFI_ENABLED=n
+CONFIG_BT_ENABLED=n
+CONFIG_MBEDTLS_TLS_CLIENT=n
+CONFIG_MBEDTLS_TLS_SERVER=n

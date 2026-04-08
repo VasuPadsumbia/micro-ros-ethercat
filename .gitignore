@@ -1,0 +1,48 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+*.egg
+
+# ESP-IDF build
+firmware/build/
+firmware/sdkconfig
+firmware/.cache/
+firmware/dependencies.lock
+
+# FPGA build outputs
+ethercat-slave/build/out/
+ethercat-slave/build/gowin_proj/
+ethercat-slave/eeprom/slave_eeprom.bin
+*.vcd
+*.lxt
+*.fst
+*.gtkw
+
+# Agent build
+agent/build/
+
+# Submodules fetched by setup.sh (not tracked as submodules)
+firmware/components/micro_ros_espidf_component/
+agent/micro_ros_agent/
+# agent/soem is a git submodule — do NOT ignore it
+
+# Simulation
+sim_build/
+results.xml
+*.o
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets / credentials
+*.key
+*.pem
+*.env
