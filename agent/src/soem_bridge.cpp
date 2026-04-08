@@ -7,16 +7,12 @@
  */
 #include "soem_bridge.h"
 
+#include <atomic>
 #include <cstdio>
 #include <csignal>
 #include <thread>
 #include <chrono>
 #include <cstring>
-
-// micro-ROS agent library
-// Agent.hpp is part of the micro-ROS-Agent source tree
-// (cloned by setup.sh into agent/micro_ros_agent)
-#include "agent/Agent.hpp"
 
 namespace micro_ros_ethercat {
 
@@ -80,7 +76,6 @@ int SoemBridge::run()
     //
     // ── Relay loop ────────────────────────────────────────────────────────
     static uint8_t read_buf[MAILBOX_SIZE];
-    static uint8_t write_buf[MAILBOX_SIZE];
 
     printf("[soem_bridge] Relay loop running. Press Ctrl+C to stop.\n");
 

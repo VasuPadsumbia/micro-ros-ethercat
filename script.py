@@ -143,21 +143,26 @@ def build_slave() -> int:
 
 def build_agent() -> int:
     banner("Building PC agent")
+
+    # Ensure SOEM submodule is present
+    soem_dir = AGENT_DIR / "soem"
+    if not (soem_dir / "CMakeLists.txt").exists():
+        banner("Initialising SOEM submodule")
+        rc = run(["git", "submodule", "update", "--init", "--recursive"])
+        if rc != 0:
+            fail("Failed to initialise SOEM submodule")
+            return rc
+
     build_dir = AGENT_DIR / "build"
     build_dir.mkdir(exist_ok=True)
 
-    soem_dir = AGENT_DIR / "soem"
-    if not soem_dir.exists():
-        fail("SOEM not found. Run: bash setup.sh")
-        return 1
-
-    rc = run(["cmake", "..", "-GNinja",
+    rc = run(["cmake", "..", "-G", "Unix Makefiles",
               f"-DSOEM_DIR={soem_dir}",
               "-DCMAKE_BUILD_TYPE=Release"],
              cwd=build_dir)
     if rc != 0:
         return rc
-    rc = run(["ninja"], cwd=build_dir)
+    rc = run(["make", f"-j{os.cpu_count() or 1}"], cwd=build_dir)
     if rc == 0:
         ok("Agent build succeeded")
     else:
@@ -247,17 +252,24 @@ def test_slave() -> int:
 
 def test_agent() -> int:
     banner("Testing PC agent (GTest)")
+    soem_dir = AGENT_DIR / "soem"
+    if not (soem_dir / "CMakeLists.txt").exists():
+        banner("Initialising SOEM submodule")
+        rc = run(["git", "submodule", "update", "--init", "--recursive"])
+        if rc != 0:
+            fail("Failed to initialise SOEM submodule")
+            return rc
+
     build_dir = AGENT_DIR / "build"
     build_dir.mkdir(exist_ok=True)
-    soem_dir = AGENT_DIR / "soem"
-    rc = run(["cmake", "..", "-GNinja",
+    rc = run(["cmake", "..", "-G", "Unix Makefiles",
               f"-DSOEM_DIR={soem_dir}",
               "-DCMAKE_BUILD_TYPE=Debug",
               "-DBUILD_TESTS=ON"],
              cwd=build_dir)
     if rc != 0:
         return rc
-    rc = run(["ninja"], cwd=build_dir)
+    rc = run(["make", f"-j{os.cpu_count() or 1}"], cwd=build_dir)
     if rc != 0:
         return rc
     return run(["ctest", "--output-on-failure"], cwd=build_dir)

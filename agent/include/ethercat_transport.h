@@ -19,10 +19,14 @@
 #include <stdbool.h>
 #include <string>
 
-// SOEM context-based API (soem/include/soem/)
+// SOEM context-based API — must include nicdrv.h before ec_main.h so that
+// ecx_portt is defined when ec_main.h references it inside ecx_context.
 extern "C" {
 #include "soem/ec_type.h"
+#include "nicdrv.h"           // defines ecx_portt (Linux oshw)
 #include "soem/ec_main.h"
+#include "soem/ec_config.h"   // ecx_config_init, ecx_config_map_group
+#include "soem/ec_dc.h"       // ecx_configdc
 }
 
 namespace micro_ros_ethercat {
@@ -65,23 +69,14 @@ private:
     int           slave_n_;
     bool          open_;
 
-    // SOEM context — owns all master state (no global variables)
+    // SOEM context — the modern ecx_contextt struct embeds all master state
+    // (port, slavelist, grouplist, ESI buffers, etc.) directly as fixed arrays.
+    // ecx_init() populates it; no manual wiring needed.
     ecx_contextt  ctx_;
-    ec_slavet     slaves_[EC_MAXSLAVE];
-    ec_groupt     groups_[EC_MAXGROUP];
-    uint8_t       esibuf_[EC_MAXEEPBUF];
-    uint32_t      esimap_[EC_MAXEEPBITMAP];
-    ec_eringt     ering_;
-    ecx_portt     port_;
-    ec_idxstackT  idxstack_;
-    boolean       ecaterror_;
-    int64         dc_time_;
-    ec_SMcommtypet sm_commtype_[EC_MAX_MAPT];
-    ec_PDOassignt  pdo_assign_[EC_MAX_MAPT];
-    ec_PDOdesct    pdo_desc_[EC_MAX_MAPT];
-    ec_eepromSMt   sm_;
-    ec_eepromFMMUt fmmu_;
-    char           iobuf_[4096];
+
+    // I/O buffer for process data (not used by mailbox transport, but required
+    // by ecx_config_map).
+    uint8_t       iobuf_[4096];
 };
 
 } // namespace micro_ros_ethercat
