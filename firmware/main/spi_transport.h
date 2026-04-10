@@ -29,6 +29,10 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 
+// Forward-declare the micro-XRCE-DDS custom transport struct.
+// Full definition comes from <uxr/client/transport.h> included by the caller.
+struct uxrCustomTransport;
+
 // ── Pin definitions ─────────────────────────────────────────────────────────
 #define SPI_TRANSPORT_HOST      SPI2_HOST
 #define SPI_TRANSPORT_SCLK_PIN  GPIO_NUM_14

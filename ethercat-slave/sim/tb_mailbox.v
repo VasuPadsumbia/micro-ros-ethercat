@@ -1,3 +1,4 @@
+`ifndef SYNTHESIZE
 // ============================================================================
 // tb_mailbox.v — Testbench for mailbox.v
 //
@@ -162,3 +163,4 @@ module tb_mailbox;
     initial begin #500000; $display("TIMEOUT"); $finish; end
 
 endmodule
+`endif // SYNTHESIZE

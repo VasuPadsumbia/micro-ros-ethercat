@@ -90,12 +90,17 @@ module mii_mac (
     end
 
     // Recover binary rptr in sys_clk domain for full detection
+    // Gray-to-binary: bin[i] = XOR of gray[FIFO_DEPTH:i]
+    // Use upward loop: bin[FIFO_DEPTH] = gray[FIFO_DEPTH],
+    //                  bin[k] = bin[k+1] ^ gray[k]  (k = FIFO_DEPTH-1 .. 0)
+    // Encoded as bin[FIFO_DEPTH-1-k] = bin[FIFO_DEPTH-k] ^ gray[FIFO_DEPTH-1-k]
     wire [FIFO_DEPTH:0] txf_rptr_bin_s;
     assign txf_rptr_bin_s[FIFO_DEPTH] = txf_rptr_gray_s2[FIFO_DEPTH];
     genvar gi;
     generate
-        for (gi = FIFO_DEPTH-1; gi >= 0; gi = gi - 1)
-            assign txf_rptr_bin_s[gi] = txf_rptr_bin_s[gi+1] ^ txf_rptr_gray_s2[gi];
+        for (gi = 0; gi < FIFO_DEPTH; gi = gi + 1)
+            assign txf_rptr_bin_s[FIFO_DEPTH-1-gi] =
+                txf_rptr_bin_s[FIFO_DEPTH-gi] ^ txf_rptr_gray_s2[FIFO_DEPTH-1-gi];
     endgenerate
 
     wire txf_full  = (txf_wptr[FIFO_DEPTH] != txf_rptr_bin_s[FIFO_DEPTH]) &&
@@ -132,8 +137,9 @@ module mii_mac (
     wire [FIFO_DEPTH:0] txf_wptr_bin_r;
     assign txf_wptr_bin_r[FIFO_DEPTH] = txf_wptr_gray_s2[FIFO_DEPTH];
     generate
-        for (gi = FIFO_DEPTH-1; gi >= 0; gi = gi - 1)
-            assign txf_wptr_bin_r[gi] = txf_wptr_bin_r[gi+1] ^ txf_wptr_gray_s2[gi];
+        for (gi = 0; gi < FIFO_DEPTH; gi = gi + 1)
+            assign txf_wptr_bin_r[FIFO_DEPTH-1-gi] =
+                txf_wptr_bin_r[FIFO_DEPTH-gi] ^ txf_wptr_gray_s2[FIFO_DEPTH-1-gi];
     endgenerate
     wire txf_empty = (txf_wptr_bin_r == txf_rptr);
 
@@ -297,8 +303,9 @@ module mii_mac (
     wire [RXF_DEPTH:0] rxf_rptr_bin_r;
     assign rxf_rptr_bin_r[RXF_DEPTH] = rxf_rptr_gray_s2_r[RXF_DEPTH];
     generate
-        for (gi = RXF_DEPTH-1; gi >= 0; gi = gi - 1)
-            assign rxf_rptr_bin_r[gi] = rxf_rptr_bin_r[gi+1] ^ rxf_rptr_gray_s2_r[gi];
+        for (gi = 0; gi < RXF_DEPTH; gi = gi + 1)
+            assign rxf_rptr_bin_r[RXF_DEPTH-1-gi] =
+                rxf_rptr_bin_r[RXF_DEPTH-gi] ^ rxf_rptr_gray_s2_r[RXF_DEPTH-1-gi];
     endgenerate
     wire rxf_full_rx = (rxf_wptr[RXF_DEPTH] != rxf_rptr_bin_r[RXF_DEPTH]) &&
                        (rxf_wptr[RXF_DEPTH-1:0] == rxf_rptr_bin_r[RXF_DEPTH-1:0]);
@@ -414,8 +421,9 @@ module mii_mac (
     wire [RXF_DEPTH:0] rxf_wptr_bin_s;
     assign rxf_wptr_bin_s[RXF_DEPTH] = rxf_wptr_gray_s2[RXF_DEPTH];
     generate
-        for (gi = RXF_DEPTH-1; gi >= 0; gi = gi - 1)
-            assign rxf_wptr_bin_s[gi] = rxf_wptr_bin_s[gi+1] ^ rxf_wptr_gray_s2[gi];
+        for (gi = 0; gi < RXF_DEPTH; gi = gi + 1)
+            assign rxf_wptr_bin_s[RXF_DEPTH-1-gi] =
+                rxf_wptr_bin_s[RXF_DEPTH-gi] ^ rxf_wptr_gray_s2[RXF_DEPTH-1-gi];
     endgenerate
     wire rxf_empty_s = (rxf_wptr_bin_s == rxf_rptr);
 

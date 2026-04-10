@@ -9,7 +9,10 @@ scapy>=2.5
 # Serial communication (firmware flashing helpers)
 pyserial>=3.5
 
-# FPGA tooling helpers
+# FPGA tooling — apio wraps yosys + nextpnr + gowin_pack via oss-cad-suite
+apio>=0.9
+
+# FTDI helpers (used by apio/openFPGALoader for JTAG)
 pyftdi>=0.55.4
 
 # Binary protocol parsing

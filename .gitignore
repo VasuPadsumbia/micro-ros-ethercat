@@ -1,3 +1,9 @@
+# Logs
+logs/*.log
+
+# SDK tools (cloned by setup.sh — do not commit)
+tools/
+
 # Python
 .venv/
 __pycache__/
@@ -12,9 +18,9 @@ firmware/sdkconfig
 firmware/.cache/
 firmware/dependencies.lock
 
-# FPGA build outputs
-ethercat-slave/build/out/
-ethercat-slave/build/gowin_proj/
+# FPGA build outputs (apio writes to hardware/)
+ethercat-slave/hardware/
+ethercat-slave/.apio/
 ethercat-slave/eeprom/slave_eeprom.bin
 *.vcd
 *.lxt

@@ -2,8 +2,8 @@
 // top.v — Tang Nano 20K top-level: micro-ROS EtherCAT Slave
 //
 // Instantiates:
-//   mdio_ctrl      — PHY initialisation
-//   mii_mac × 2   — MII MAC for each DP83848
+//   mdio_ctrl      — PHY initialisation (Port 0 only)
+//   mii_mac        — MII MAC for PHY0 (Port 0)
 //   ethercat_slave — EtherCAT datagram processing
 //   esc_registers  — ESC register file + process data RAM
 //   mailbox        — SM0/SM1 mailbox buffers
@@ -14,9 +14,8 @@
 //   clk_27  — 27 MHz XTAL (Tang Nano 20K)
 //   tx_clk0 — 25 MHz from PHY0 TX_CLK (MII TX)
 //   rx_clk0 — 25 MHz from PHY0 RX_CLK (MII RX)
-//   tx_clk1 — 25 MHz from PHY1 TX_CLK
-//   rx_clk1 — 25 MHz from PHY1 RX_CLK
 //
+// Single-slave topology: Port 1 removed (no downstream slave).
 // Pin assignments: see constraints/tang_nano_20k.cst
 // ============================================================================
 module top (
@@ -38,21 +37,6 @@ module top (
     output wire        p0_mdc,
     inout  wire        p0_mdio,
     output wire        p0_rst_n,
-
-    // ── PHY1 MII (Port 1 — optional downstream slave) ─────────────────
-    input  wire        p1_tx_clk,
-    output wire [3:0]  p1_txd,
-    output wire        p1_tx_en,
-    output wire        p1_tx_er,
-
-    input  wire        p1_rx_clk,
-    input  wire [3:0]  p1_rxd,
-    input  wire        p1_rx_dv,
-    input  wire        p1_rx_er,
-
-    output wire        p1_mdc,
-    inout  wire        p1_mdio,
-    output wire        p1_rst_n,
 
     // ── SPI slave (to ESP32) ──────────────────────────────────────────
     input  wire        spi_sck,
@@ -160,10 +144,6 @@ module top (
     wire [7:0]  esc_wdata, esc_rdata;
     wire        esc_wr, esc_rd;
 
-    wire [15:0] pdi_addr;
-    wire [7:0]  pdi_wdata, pdi_rdata;
-    wire        pdi_wr, pdi_rd;
-
     wire [15:0] station_addr;
     wire [3:0]  al_control;
     wire [3:0]  al_state;
@@ -176,7 +156,7 @@ module top (
     wire [15:0] eeprom_rdata;
     wire        eeprom_ack;
 
-    wire [63:0] sm_cfg [0:7];
+    wire [511:0] sm_cfg; // 8 SMs × 64 bits, flat packed — Verilog-2001 compatible
 
     esc_registers esc_regs (
         .clk              (clk_27),
@@ -186,11 +166,11 @@ module top (
         .ec_rdata         (esc_rdata),
         .ec_wr            (esc_wr),
         .ec_rd            (esc_rd),
-        .pdi_addr         (pdi_addr),
-        .pdi_wdata        (pdi_wdata),
-        .pdi_rdata        (pdi_rdata),
-        .pdi_wr           (pdi_wr),
-        .pdi_rd           (pdi_rd),
+        .pdi_addr         (16'h0000),
+        .pdi_wdata        (8'h00),
+        .pdi_rdata        (),
+        .pdi_wr           (1'b0),
+        .pdi_rd           (1'b0),
         .eeprom_word_addr (eeprom_word_addr),
         .eeprom_req       (eeprom_req),
         .eeprom_rdata     (eeprom_rdata),

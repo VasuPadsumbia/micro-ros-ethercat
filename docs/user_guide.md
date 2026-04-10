@@ -1,5 +1,81 @@
 # User Guide
 
+## script.py — Project Orchestrator
+
+All project operations are driven from `script.py` in the workspace root.
+
+```
+python script.py --build [all|firmware|slave|agent]
+python script.py --clean [all|firmware|slave|agent]
+python script.py --test  [all|firmware|slave|agent]
+python script.py --run   [agent|flash-firmware|flash-slave]
+```
+
+### --build
+
+| Target | What it does |
+|--------|-------------|
+| `agent` | CMake + make for the PC agent (pulls SOEM submodule if missing) |
+| `firmware` | ESP-IDF `idf.py build` for the ESP32 firmware |
+| `slave` | Yosys synthesis + nextpnr-gowin P&R → `.fs` bitstream |
+| `all` | All three in order: firmware → slave → agent |
+
+```bash
+python script.py --build agent
+python script.py --build all
+```
+
+### --test
+
+| Target | What it does |
+|--------|-------------|
+| `agent` | Builds with `-DBUILD_TESTS=ON`, runs GTest via `ctest` (no hardware needed) |
+| `slave` | Runs cocotb + iverilog simulation tests via `pytest` |
+| `firmware` | ESP-IDF build + flash + monitor Unity tests (ESP32 required) |
+| `all` | All three |
+
+```bash
+python script.py --test agent
+python script.py --test slave
+```
+
+### --clean
+
+| Target | What it does |
+|--------|-------------|
+| `agent` | Deletes `agent/build/` |
+| `slave` | Deletes `ethercat-slave/build/out/` |
+| `firmware` | Runs `idf.py fullclean` |
+| `all` | All three |
+
+```bash
+python script.py --clean all
+```
+
+### --run
+
+| Action | What it does |
+|--------|-------------|
+| `agent` | Runs the built agent binary (requires root for raw socket) |
+| `flash-firmware` | Flashes ESP32 via `idf.py flash` |
+| `flash-slave` | Flashes FPGA bitstream via `openFPGALoader` |
+
+```bash
+python script.py --run agent --eth enp3s0
+python script.py --run flash-firmware --port /dev/ttyUSB0 --baud 460800
+python script.py --run flash-slave
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--eth IFACE` | `eth0` | Ethernet interface for the EtherCAT agent |
+| `--port PORT` | `/dev/ttyUSB0` | Serial port for firmware flashing |
+| `--baud BAUD` | `460800` | Baud rate for firmware flashing |
+
+---
+
 ## Running the System
 
 ### Start Order

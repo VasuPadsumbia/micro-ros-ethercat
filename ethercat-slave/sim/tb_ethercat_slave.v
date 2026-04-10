@@ -1,3 +1,4 @@
+`ifndef SYNTHESIZE
 // ============================================================================
 // tb_ethercat_slave.v — Testbench for ethercat_slave.v
 //
@@ -203,3 +204,4 @@ module tb_ethercat_slave;
     initial begin #2000000; $display("TIMEOUT"); $finish; end
 
 endmodule
+`endif // SYNTHESIZE

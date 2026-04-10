@@ -1,3 +1,4 @@
+`ifndef SYNTHESIZE
 // ============================================================================
 // tb_mii_mac.v — Testbench for mii_mac.v
 //
@@ -176,3 +177,4 @@ module tb_mii_mac;
     initial begin #5000000; $display("TIMEOUT"); $finish; end
 
 endmodule
+`endif // SYNTHESIZE

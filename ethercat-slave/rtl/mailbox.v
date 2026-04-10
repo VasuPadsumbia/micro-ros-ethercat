@@ -24,9 +24,9 @@
 // ============================================================================
 module mailbox #(
     parameter MBX_OUT_BASE = 16'h1000,
-    parameter MBX_OUT_SIZE = 16'd256,
-    parameter MBX_IN_BASE  = 16'h1100,
-    parameter MBX_IN_SIZE  = 16'd256
+    parameter MBX_OUT_SIZE = 16'd64,
+    parameter MBX_IN_BASE  = 16'h1040,
+    parameter MBX_IN_SIZE  = 16'd64
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -64,15 +64,15 @@ module mailbox #(
     assign int_n = ~mbox_out_ready;
 
     // ── SM0 buffer: Mailbox Out (EtherCAT writes, SPI reads) ─────────────
-    reg [7:0]  sm0_buf [0:255];
-    reg [7:0]  sm0_rd_ptr;
-    reg [15:0] sm0_len;     // payload len from header
+    reg [7:0]  sm0_buf [0:63];
+    reg [5:0]  sm0_rd_ptr;
+    reg [7:0]  sm0_len;     // payload len from header (fits in 64 bytes)
     reg        sm0_full;    // master has written complete frame
 
     // ── SM1 buffer: Mailbox In (SPI writes, EtherCAT reads) ──────────────
-    reg [7:0]  sm1_buf [0:255];
-    reg [7:0]  sm1_wr_ptr;
-    reg [15:0] sm1_len;
+    reg [7:0]  sm1_buf [0:63];
+    reg [5:0]  sm1_wr_ptr;
+    reg [7:0]  sm1_len;
     reg        sm1_full;    // SPI has written complete frame
 
     // ── EtherCAT access ───────────────────────────────────────────────────
@@ -110,7 +110,7 @@ module mailbox #(
             // sm0_written: master finished writing, frame is ready for ESP32
             if (sm0_written) begin
                 // Extract length from header bytes 0-1
-                sm0_len       <= {sm0_buf[1], sm0_buf[0]} + 16'd8; // +8 header
+                sm0_len       <= sm0_buf[0] + 8'd8; // low byte of length + 8-byte header
                 sm0_rd_ptr    <= 0;
                 sm0_full      <= 1;
                 mbox_out_ready<= 1;
@@ -119,7 +119,7 @@ module mailbox #(
             // SPI reads from SM0 byte-by-byte
             if (spi_rx_ack && sm0_full) begin
                 sm0_rd_ptr <= sm0_rd_ptr + 1;
-                if (sm0_rd_ptr + 1 >= sm0_len[7:0]) begin
+                if (sm0_rd_ptr + 1 >= sm0_len) begin
                     sm0_full       <= 0;
                     mbox_out_ready <= 0;
                 end

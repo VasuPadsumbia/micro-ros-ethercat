@@ -174,7 +174,6 @@ module spi_slave (
                 frame_state <= F_CMD;
                 rx_crc      <= 0;
                 tx_crc      <= 0;
-                bit_pos     <= 7; // will be overridden above, just for clarity
             end
 
             if (byte_done && cs_active) begin

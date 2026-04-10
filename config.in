@@ -1,0 +1,32 @@
+# config.in — project-wide configuration
+# Sourced by run.sh and setup.sh.
+# Edit these values to match your environment.
+
+# ── Debug / logging ───────────────────────────────────────────────────────────
+# When DEBUG=true every command writes a log file to logs/<command>.log.
+# When DEBUG=false commands print to stdout only; no log files are created.
+DEBUG=true
+
+# ── Ethernet interface ────────────────────────────────────────────────────────
+# Network interface connected to the Tang Nano 20K EtherCAT port.
+ETH_IFACE=eth0
+
+# ── Serial port (ESP32 firmware flash) ────────────────────────────────────────
+SERIAL_PORT=/dev/ttyUSB0
+BAUD_RATE=460800
+
+# ── Build type ────────────────────────────────────────────────────────────────
+# Release | Debug
+CMAKE_BUILD_TYPE=Release
+
+# ── EtherCAT slave number ─────────────────────────────────────────────────────
+# Which SOEM slave index the micro-ROS transport targets (1-based).
+ETHERCAT_SLAVE=1
+
+# ── Paths (relative to project root; normally no need to change) ──────────────
+FIRMWARE_DIR=firmware
+SLAVE_DIR=ethercat-slave
+AGENT_DIR=agent
+LOGS_DIR=logs
+TOOLS_DIR=tools          # ESP-IDF and apio packages installed hereo via APIO_HOME env var
+IDF_BRANCH=v5.3          # ESP-IDF version to clone

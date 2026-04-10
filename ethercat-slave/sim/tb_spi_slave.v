@@ -1,3 +1,4 @@
+`ifndef SYNTHESIZE
 // ============================================================================
 // tb_spi_slave.v — Verilog testbench for spi_slave.v
 //
@@ -171,3 +172,4 @@ module tb_spi_slave;
     end
 
 endmodule
+`endif // SYNTHESIZE

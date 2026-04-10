@@ -1,0 +1,32 @@
+timestamp: "09021201527"
+arch: GOWIN
+fpga_info {
+  fpga_id: "gw2ar-lv18qn88c8-i7"
+  part_num: "GW2AR-LV18QN88C8/I7"
+  size: "20k"
+  gowin_params {
+    yosys_family: "gw2a"
+    nextpnr_family: "GW2A-18C"
+    packer_device: "GW2A-18C"
+  }
+}
+verbosity {
+  all: false
+  synth: false
+  pnr: false
+}
+environment {
+  platform_id: "linux-x86-64"
+  is_windows: false
+  terminal_mode: FORCE_TERMINAL
+  theme_name: "light"
+  debug_level: 0
+  yosys_path: "/home/vasu/.apio/packages/oss-cad-suite/share/yosys"
+  trellis_path: "/home/vasu/.apio/packages/oss-cad-suite/share/trellis"
+  scons_shell_id: "bash"
+}
+apio_env_params {
+  env_name: "default"
+  board_id: "sipeed-tang-nano-20k"
+  top_module: "top"
+}

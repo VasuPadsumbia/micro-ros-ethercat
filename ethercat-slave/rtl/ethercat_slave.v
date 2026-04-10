@@ -86,10 +86,12 @@ module ethercat_slave (
     localparam AL_SAFEOP = 4'h4;
     localparam AL_OP     = 4'h8;
 
-    // ── Frame buffer (max 1518 bytes) ─────────────────────────────────────
-    localparam FRAME_BUF_SZ = 11; // 2^11 = 2048 bytes (enough for max Ethernet)
+    // ── Frame buffer ───────────────────────────────────────────────────────
+    // 512 B covers max EtherCAT mailbox frame (14+2+10+256 = 282 B).
+    // Keeping to 512 avoids expanding 2 KB into 16 384 flip-flops in yosys.
+    localparam FRAME_BUF_SZ = 7; // 2^7 = 128 bytes (fits typical micro-ROS VoE frames)
     reg [7:0]  fbuf [0:(1<<FRAME_BUF_SZ)-1];
-    reg [10:0] fbuf_len;     // received frame length (including Ethernet header)
+    reg [7:0]  fbuf_len;     // received frame length (7-bit index fits 128)
 
     // ── Receive state machine ─────────────────────────────────────────────
     localparam RX_COLLECT  = 2'd0;

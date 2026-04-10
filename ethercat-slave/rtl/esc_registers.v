@@ -44,20 +44,22 @@ module esc_registers (
     input  wire        eeprom_ack,
 
     // AL state machine outputs
-    output reg  [3:0]  al_control,   // desired state from master (bits 3:0)
+    output wire [3:0]  al_control,   // desired state from master (bits 3:0)
     output reg  [3:0]  al_status,    // current state (written by app logic)
     input  wire [3:0]  al_state_in,  // application sets current AL state
     input  wire [15:0] al_status_code_in,
 
     // Station address
-    output reg  [15:0] station_addr,
+    output wire [15:0] station_addr,
 
     // DL control / status
-    output reg  [7:0]  dl_ctrl,
+    output wire [7:0]  dl_ctrl,
     input  wire [7:0]  dl_status_in,
 
-    // SyncManager configurations (8 SMs × 8 bytes)
-    output wire [63:0] sm_cfg [0:7]  // {start_addr[15:0], len[15:0], ctrl[7:0], status[7:0], act[7:0], pdi_ctrl[7:0]}
+    // SyncManager configurations: 8 SMs × 64 bits, flat packed bus
+    // Byte b of SM g = sm_cfg[g*64 + b*8 +: 8]
+    // Layout per SM: {pdi_ctrl[7:0], act[7:0], status[7:0], ctrl[7:0], len[15:0], start_addr[15:0]}
+    output wire [511:0] sm_cfg  // 8 × 64-bit, Verilog-2001 compatible flat vector
 );
 
     // ── ROM: fixed registers ──────────────────────────────────────────────
@@ -83,17 +85,17 @@ module esc_registers (
     reg [7:0]  eeprom_ctrl_r  [0:3]; // 0x0500–0x0503
     reg [7:0]  eeprom_addr_r  [0:1]; // 0x0504–0x0505
 
-    // SyncManager registers: 8 SMs × 8 bytes
-    reg [7:0]  sm_r [0:7][0:7];
+    // SyncManager registers: 8 SMs, each 64-bit packed (8 bytes)
+    // Byte b of SM g = sm_r[g][b*8 +: 8]
+    reg [63:0] sm_r [0:7];
 
-    // Process data RAM (4 KiB)
-    reg [7:0]  pd_ram [0:4095];
+    // Process data RAM — 512 bytes covers SM0 (0x1000-0x10FF) + SM1 (0x1100-0x11FF).
+    // Async read prevents BRAM inference; keep small to avoid register explosion.
+    reg [7:0]  pd_ram [0:127];  // 128 bytes: 0x1000-0x107F
 
     // ── EEPROM shadow (first 128 words cached) ────────────────────────────
-    reg [7:0]  eeprom_cache [0:255]; // 128 words = 256 bytes
+    reg [7:0]  eeprom_cache [0:63];  // 32 words = 64 bytes
     reg        eeprom_cache_valid;
-    reg [7:0]  eeprom_fetch_idx;
-    reg        eeprom_busy;
 
     // ── Output wiring ─────────────────────────────────────────────────────
     assign al_control   = al_ctrl_r[0][3:0];
@@ -103,8 +105,7 @@ module esc_registers (
     genvar g;
     generate
         for (g = 0; g < 8; g = g + 1) begin : sm_out
-            assign sm_cfg[g] = {sm_r[g][7], sm_r[g][6], sm_r[g][5], sm_r[g][4],
-                                sm_r[g][3], sm_r[g][2], sm_r[g][1], sm_r[g][0]};
+            assign sm_cfg[g*64 +: 64] = sm_r[g];
         end
     endgenerate
 
@@ -149,15 +150,15 @@ module esc_registers (
         16'h0504: ec_rdata = eeprom_addr_r[0];
         16'h0505: ec_rdata = eeprom_addr_r[1];
         16'h0506: ec_rdata = eeprom_cache_valid ?
-                             eeprom_cache[{eeprom_addr_r[0][6:0], 1'b0}] : 8'hFF;
+                             eeprom_cache[{eeprom_addr_r[0][4:0], 1'b0}] : 8'hFF;
         16'h0507: ec_rdata = eeprom_cache_valid ?
-                             eeprom_cache[{eeprom_addr_r[0][6:0], 1'b1}] : 8'hFF;
+                             eeprom_cache[{eeprom_addr_r[0][4:0], 1'b1}] : 8'hFF;
         // SyncManagers 0x0800-0x087F
         16'h08??: begin
-            ec_rdata = sm_r[ec_addr[6:3]][ec_addr[2:0]];
+            ec_rdata = sm_r[ec_addr[6:3]][ec_addr[2:0]*8 +: 8];
         end
-        // Process data RAM
-        16'h1???: ec_rdata = pd_ram[ec_addr[11:0]];
+        // Process data RAM (128 B: 0x1000-0x107F)
+        16'h10??: ec_rdata = pd_ram[ec_addr[6:0]];
         default: ec_rdata = 8'hFF;
         endcase
     end
@@ -173,9 +174,7 @@ module esc_registers (
             eeprom_ctrl_r[2]  <= 8'h00; eeprom_ctrl_r[3]  <= 8'h00;
             eeprom_addr_r[0]  <= 8'h00; eeprom_addr_r[1]  <= 8'h00;
             eeprom_req        <= 0;
-            eeprom_busy       <= 0;
             eeprom_cache_valid<= 0;
-            eeprom_fetch_idx  <= 0;
         end else begin
             eeprom_req <= 0;
 
@@ -196,16 +195,15 @@ module esc_registers (
                         eeprom_req       <= 1;
                     end
                 end
-                16'h08??: sm_r[ec_addr[6:3]][ec_addr[2:0]] <= ec_wdata;
-                16'h1???: pd_ram[ec_addr[11:0]] <= ec_wdata;
+                16'h08??: sm_r[ec_addr[6:3]][ec_addr[2:0]*8 +: 8] <= ec_wdata;
                 default:;
                 endcase
             end
 
             // Cache EEPROM read result
             if (eeprom_ack) begin
-                eeprom_cache[{eeprom_addr_r[0][6:0], 1'b0}] <= eeprom_rdata[7:0];
-                eeprom_cache[{eeprom_addr_r[0][6:0], 1'b1}] <= eeprom_rdata[15:8];
+                eeprom_cache[{eeprom_addr_r[0][4:0], 1'b0}] <= eeprom_rdata[7:0];
+                eeprom_cache[{eeprom_addr_r[0][4:0], 1'b1}] <= eeprom_rdata[15:8];
                 eeprom_cache_valid <= 1;
                 // Update status: clear busy bit
                 eeprom_ctrl_r[1]  <= 8'h80; // eeprom loaded, no error
@@ -213,16 +211,21 @@ module esc_registers (
         end
     end
 
-    // ── PDI (SPI slave) port — process data RAM access ────────────────────
-    always @(*) begin
-        pdi_rdata = 8'hFF;
-        if (pdi_rd && pdi_addr[15:12] == 4'h1)
-            pdi_rdata = pd_ram[pdi_addr[11:0]];
+    // ── Process data RAM — unified write port (EC and PDI arbitrated) ─────
+    // EC writes take priority; PDI writes only when EC is not writing PD RAM.
+    // 0x1000-0x107F → addr[15:7] == 9'h020 (128-byte aligned block)
+    always @(posedge clk) begin
+        if (ec_wr && ec_addr[15:7] == 9'h020)
+            pd_ram[ec_addr[6:0]] <= ec_wdata;
+        else if (pdi_wr && pdi_addr[15:7] == 9'h020)
+            pd_ram[pdi_addr[6:0]] <= pdi_wdata;
     end
 
-    always @(posedge clk) begin
-        if (pdi_wr && pdi_addr[15:12] == 4'h1)
-            pd_ram[pdi_addr[11:0]] <= pdi_wdata;
+    // ── PDI (SPI slave) port — process data RAM read ──────────────────────
+    always @(*) begin
+        pdi_rdata = 8'hFF;
+        if (pdi_rd && pdi_addr[15:7] == 9'h020)
+            pdi_rdata = pd_ram[pdi_addr[6:0]];
     end
 
     // Drive AL status output
