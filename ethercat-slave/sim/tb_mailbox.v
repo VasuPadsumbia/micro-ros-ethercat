@@ -62,7 +62,7 @@ module tb_mailbox;
 
     task check;
         input cond;
-        input [127:0] msg;
+        input [511:0] msg;
         begin
             if (!cond) begin
                 $display("FAIL: %s at %0t", msg, $time); errors = errors + 1;
@@ -85,7 +85,13 @@ module tb_mailbox;
     endtask
 
     initial begin
-        $dumpfile("tb_mailbox.vcd");
+        begin : vcd_dump
+            string vcd_path;
+            if ($value$plusargs("vcd_file=%s", vcd_path))
+                $dumpfile(vcd_path);
+            else
+                $dumpfile("tb_mailbox.vcd");
+        end
         $dumpvars(0, tb_mailbox);
 
         rst_n = 0; #100; rst_n = 1; #50;
@@ -110,6 +116,7 @@ module tb_mailbox;
         // Signal: master finished writing SM0
         @(posedge clk); sm0_written <= 1;
         @(posedge clk); sm0_written <= 0;
+        @(posedge clk);
         @(posedge clk);
 
         check(mbox_out_ready == 1, "SM0 mbox_out_ready after write");

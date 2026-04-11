@@ -168,7 +168,13 @@ module tb_ethercat_slave;
 
     // ── Test ─────────────────────────────────────────────────────────────
     initial begin
-        $dumpfile("tb_ethercat_slave.vcd");
+        begin : vcd_dump
+            string vcd_path;
+            if ($value$plusargs("vcd_file=%s", vcd_path))
+                $dumpfile(vcd_path);
+            else
+                $dumpfile("tb_ethercat_slave.vcd");
+        end
         $dumpvars(0, tb_ethercat_slave);
 
         rst_n = 0; #200; rst_n = 1; #100;

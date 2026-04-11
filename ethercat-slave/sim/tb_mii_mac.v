@@ -18,7 +18,7 @@ module tb_mii_mac;
 
     // ── MII clocks (simulate 25 MHz from PHY) ────────────────────────────
     reg tx_clk = 0;
-    reg rx_clk = 0;
+    reg rx_clk = 1; // start with different phase to avoid simulator edge races
 
     // ── MII TX signals ────────────────────────────────────────────────────
     wire [3:0] txd;
@@ -96,19 +96,17 @@ module tb_mii_mac;
                 payload[i] = i[7:0];
 
             @(posedge sys_clk);
-            tx_sof = 1;
             for (i = 0; i < len; i = i + 1) begin
-                @(negedge sys_clk);
-                tx_data  = payload[i];
-                tx_valid = 1;
-                tx_last  = (i == len - 1);
-                tx_sof   = (i == 0);
+                tx_data  <= payload[i];
+                tx_valid <= 1;
+                tx_last  <= (i == len - 1);
+                tx_sof   <= (i == 0);
                 @(posedge sys_clk);
                 while (!tx_ready) @(posedge sys_clk);
             end
-            tx_valid = 0;
-            tx_last  = 0;
-            tx_sof   = 0;
+            tx_valid <= 0;
+            tx_last  <= 0;
+            tx_sof   <= 0;
         end
     endtask
 
@@ -116,7 +114,7 @@ module tb_mii_mac;
     integer errors = 0;
     task check;
         input cond;
-        input [127:0] msg;
+        input [511:0] msg;
         begin
             if (!cond) begin
                 $display("FAIL: %s at %0t", msg, $time); errors = errors + 1;
@@ -131,13 +129,20 @@ module tb_mii_mac;
 
     always @(posedge sys_clk) begin
         if (rx_valid && rx_ready) begin
+            $display("RX BYTE: %h, LAST: %b, FCS_OK: %b at %0t", rx_data, rx_last, rx_fcs_ok, $time);
             rx_count = rx_count + 1;
             if (rx_last) begin
                 rx_fcs_ok_r     = rx_fcs_ok;
                 rx_fcs_captured = 1;
+                $display("RX LAST SEEN! rx_crc_r = %x", dut.rx_crc_r);
             end
         end
     end
+
+    always @(posedge tx_clk) begin
+        if (tx_en && !tx_en_d1) $display("TX_EN POS_EDGE at %0t", $time);
+    end
+
 
     // ── Test sequence ─────────────────────────────────────────────────────
     initial begin

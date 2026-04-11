@@ -17,11 +17,16 @@ firmware/build/
 firmware/sdkconfig
 firmware/.cache/
 firmware/dependencies.lock
-
+firmware/test/build/
+firmware/test/sdkconfig
 # FPGA build outputs (apio writes to hardware/)
 ethercat-slave/hardware/
 ethercat-slave/.apio/
 ethercat-slave/eeprom/slave_eeprom.bin
+ethercat-slave/tests/sim_build/
+ethercat-slave/tests/waves/
+ethercat-slave/build/
+ethercat-slave/_build/
 *.vcd
 *.lxt
 *.fst
@@ -39,6 +44,7 @@ agent/micro_ros_agent/
 sim_build/
 results.xml
 *.o
+data/
 
 # Editor
 .vscode/
@@ -52,3 +58,4 @@ results.xml
 *.key
 *.pem
 *.env
+

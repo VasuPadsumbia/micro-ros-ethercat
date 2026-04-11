@@ -60,7 +60,7 @@ module mii_mac (
     // =========================================================================
     // Async FIFO: sys_clk write side → tx_clk read side
     // Simple 64-byte async FIFO (enough for back-pressure)
-    localparam FIFO_DEPTH = 6; // 2^6 = 64 entries; each = {last,data}
+    localparam FIFO_DEPTH = 5; // 2^5 = 32 entries; each = {last,data}
 
     reg [8:0]  txf_mem  [0:(1<<FIFO_DEPTH)-1]; // {last, data[7:0]}
     reg [FIFO_DEPTH:0] txf_wptr; // sys_clk domain
@@ -111,7 +111,7 @@ module mii_mac (
     always @(posedge sys_clk or negedge rst_n) begin
         if (!rst_n) txf_wptr <= 0;
         else if (tx_valid && !txf_full) begin
-            txf_mem[txf_wptr[FIFO_DEPTH-1:0]] <= {tx_last, tx_data};
+            txf_mem[txf_wptr[FIFO_DEPTH-1:0]] <= {tx_sof, tx_last, tx_data};
             txf_wptr <= txf_wptr + 1;
         end
     end
@@ -130,7 +130,7 @@ module mii_mac (
     reg [7:0]  tx_byte_r;
     reg        tx_last_r;
     reg [31:0] tx_crc_r;
-    reg [2:0]  tx_fcs_cnt;
+    reg [3:0]  tx_fcs_cnt;
     reg [3:0]  tx_ifg_cnt;
 
     // Recover wptr in tx_clk domain
@@ -143,28 +143,43 @@ module mii_mac (
     endgenerate
     wire txf_empty = (txf_wptr_bin_r == txf_rptr);
 
-    // CRC32 update function (reflected, Ethernet)
-    function [31:0] crc32_nibble;
-        input [31:0] crc;
-        input [3:0]  nib;
-        integer k;
-        reg [31:0] c;
-        begin
-            c = crc;
-            for (k = 0; k < 4; k = k + 1)
-                c = c[0] ? ({1'b0, c[31:1]} ^ 32'hEDB88320) ^ ({31'b0, nib[k]} << 31)
-                         :  {1'b0, c[31:1]} ^ ({31'b0, nib[k]} << 31);
-            // Simplified: process bit by bit
-            c = crc;
-            for (k = 0; k < 4; k = k + 1) begin
-                if (c[0] ^ nib[k])
-                    c = {1'b0, c[31:1]} ^ 32'hEDB88320;
-                else
-                    c = {1'b0, c[31:1]};
-            end
-            crc32_nibble = c;
-        end
-    endfunction
+    // ── CRC32 (reflected, Ethernet poly 0xEDB88320) ──────────────────────
+    // Flat wire-based nibble update: avoids deep combinational chains
+    // that NextPNR cannot route on the GW2AR-18.
+    //
+    // One-bit CRC step: if (crc[0] ^ bit) crc = {0,crc[31:1]} ^ 0xEDB88320
+    //                   else              crc = {0,crc[31:1]}
+    // Expanded for 4 bits (k=0..3): each step is a single XOR mux on 32 wires.
+
+    // TX CRC: updated in TX_DATA state from tx_crc_r
+    wire [31:0] tx_crc_lo_b0, tx_crc_lo_b1, tx_crc_lo_b2, tx_crc_lo_b3;
+    wire [31:0] tx_crc_hi_b0, tx_crc_hi_b1, tx_crc_hi_b2, tx_crc_hi_b3;
+
+    // Low nibble update (tx_byte_r[3:0])
+    assign tx_crc_lo_b0 = (tx_crc_r[0]     ^ tx_byte_r[0]) ? ({1'b0,tx_crc_r[31:1]}   ^ 32'hEDB88320) : {1'b0,tx_crc_r[31:1]};
+    assign tx_crc_lo_b1 = (tx_crc_lo_b0[0] ^ tx_byte_r[1]) ? ({1'b0,tx_crc_lo_b0[31:1]} ^ 32'hEDB88320) : {1'b0,tx_crc_lo_b0[31:1]};
+    assign tx_crc_lo_b2 = (tx_crc_lo_b1[0] ^ tx_byte_r[2]) ? ({1'b0,tx_crc_lo_b1[31:1]} ^ 32'hEDB88320) : {1'b0,tx_crc_lo_b1[31:1]};
+    assign tx_crc_lo_b3 = (tx_crc_lo_b2[0] ^ tx_byte_r[3]) ? ({1'b0,tx_crc_lo_b2[31:1]} ^ 32'hEDB88320) : {1'b0,tx_crc_lo_b2[31:1]};
+
+    // High nibble update (tx_byte_r[7:4]) applied after low nibble
+    assign tx_crc_hi_b0 = (tx_crc_lo_b3[0] ^ tx_byte_r[4]) ? ({1'b0,tx_crc_lo_b3[31:1]} ^ 32'hEDB88320) : {1'b0,tx_crc_lo_b3[31:1]};
+    assign tx_crc_hi_b1 = (tx_crc_hi_b0[0] ^ tx_byte_r[5]) ? ({1'b0,tx_crc_hi_b0[31:1]} ^ 32'hEDB88320) : {1'b0,tx_crc_hi_b0[31:1]};
+    assign tx_crc_hi_b2 = (tx_crc_hi_b1[0] ^ tx_byte_r[6]) ? ({1'b0,tx_crc_hi_b1[31:1]} ^ 32'hEDB88320) : {1'b0,tx_crc_hi_b1[31:1]};
+    assign tx_crc_hi_b3 = (tx_crc_hi_b2[0] ^ tx_byte_r[7]) ? ({1'b0,tx_crc_hi_b2[31:1]} ^ 32'hEDB88320) : {1'b0,tx_crc_hi_b2[31:1]};
+
+    // RX CRC: updated from rx_crc_r with nib pair {rxd, rx_nib_lo}
+    wire [31:0] rx_crc_lo_b0, rx_crc_lo_b1, rx_crc_lo_b2, rx_crc_lo_b3;
+    wire [31:0] rx_crc_hi_b0, rx_crc_hi_b1, rx_crc_hi_b2, rx_crc_hi_b3;
+
+    assign rx_crc_lo_b0 = (rx_crc_r[0]     ^ rx_nib_lo[0]) ? ({1'b0,rx_crc_r[31:1]}     ^ 32'hEDB88320) : {1'b0,rx_crc_r[31:1]};
+    assign rx_crc_lo_b1 = (rx_crc_lo_b0[0] ^ rx_nib_lo[1]) ? ({1'b0,rx_crc_lo_b0[31:1]} ^ 32'hEDB88320) : {1'b0,rx_crc_lo_b0[31:1]};
+    assign rx_crc_lo_b2 = (rx_crc_lo_b1[0] ^ rx_nib_lo[2]) ? ({1'b0,rx_crc_lo_b1[31:1]} ^ 32'hEDB88320) : {1'b0,rx_crc_lo_b1[31:1]};
+    assign rx_crc_lo_b3 = (rx_crc_lo_b2[0] ^ rx_nib_lo[3]) ? ({1'b0,rx_crc_lo_b2[31:1]} ^ 32'hEDB88320) : {1'b0,rx_crc_lo_b2[31:1]};
+
+    assign rx_crc_hi_b0 = (rx_crc_lo_b3[0] ^ rxd[0]) ? ({1'b0,rx_crc_lo_b3[31:1]} ^ 32'hEDB88320) : {1'b0,rx_crc_lo_b3[31:1]};
+    assign rx_crc_hi_b1 = (rx_crc_hi_b0[0] ^ rxd[1]) ? ({1'b0,rx_crc_hi_b0[31:1]} ^ 32'hEDB88320) : {1'b0,rx_crc_hi_b0[31:1]};
+    assign rx_crc_hi_b2 = (rx_crc_hi_b1[0] ^ rxd[2]) ? ({1'b0,rx_crc_hi_b1[31:1]} ^ 32'hEDB88320) : {1'b0,rx_crc_hi_b1[31:1]};
+    assign rx_crc_hi_b3 = (rx_crc_hi_b2[0] ^ rxd[3]) ? ({1'b0,rx_crc_hi_b2[31:1]} ^ 32'hEDB88320) : {1'b0,rx_crc_hi_b2[31:1]};
 
     always @(posedge tx_clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -230,15 +245,14 @@ module mii_mac (
             TX_DATA: begin
                 if (!tx_nibble) begin
                     txd       <= tx_byte_r[3:0];
-                    tx_crc_r  <= crc32_nibble(tx_crc_r, tx_byte_r[3:0]);
                     tx_nibble <= 1;
                 end else begin
                     txd       <= tx_byte_r[7:4];
-                    tx_crc_r  <= crc32_nibble(tx_crc_r, tx_byte_r[7:4]);
+                    tx_crc_r  <= tx_crc_hi_b3;   // after full byte
                     tx_nibble <= 0;
                     if (tx_last_r) begin
                         // End of payload — send FCS
-                        tx_fcs_cnt <= 7; // 4 bytes × 2 nibbles - 1
+                        tx_fcs_cnt <= 8; // 4 bytes × 2 nibbles
                         tx_state   <= TX_FCS;
                     end else if (!txf_empty) begin
                         {tx_last_r, tx_byte_r} <= txf_mem[txf_rptr[FIFO_DEPTH-1:0]];
@@ -252,16 +266,17 @@ module mii_mac (
                 // Byte order: byte0 = crc[7:0], byte1 = crc[15:8], ...
                 // But CRC is bit-reflected so: send ~crc_r nibble by nibble LSB first
                 case (tx_fcs_cnt)
-                7: txd <= ~tx_crc_r[3:0];
-                6: txd <= ~tx_crc_r[7:4];
-                5: txd <= ~tx_crc_r[11:8];
-                4: txd <= ~tx_crc_r[15:12];
-                3: txd <= ~tx_crc_r[19:16];
-                2: txd <= ~tx_crc_r[23:20];
-                1: txd <= ~tx_crc_r[27:24];
-                0: txd <= ~tx_crc_r[31:28];
+                8: txd <= ~tx_crc_r[3:0];
+                7: txd <= ~tx_crc_r[7:4];
+                6: txd <= ~tx_crc_r[11:8];
+                5: txd <= ~tx_crc_r[15:12];
+                4: txd <= ~tx_crc_r[19:16];
+                3: txd <= ~tx_crc_r[23:20];
+                2: txd <= ~tx_crc_r[27:24];
+                1: txd <= ~tx_crc_r[31:28];
+                default: txd <= 4'h0;
                 endcase
-                if (tx_fcs_cnt == 0) begin
+                if (tx_fcs_cnt == 0 || tx_fcs_cnt > 8) begin // Added safety for default
                     tx_en      <= 0;
                     tx_ifg_cnt <= 23; // 96-bit IFG at 100Mbps = 24 nibble-clocks
                     tx_state   <= TX_IFG;
@@ -283,7 +298,7 @@ module mii_mac (
     // =========================================================================
     // RX path (rx_clk domain → sys_clk domain)
     // =========================================================================
-    localparam RXF_DEPTH = 6; // 64-entry async FIFO; entry = {last,fcs_ok,data}
+    localparam RXF_DEPTH = 5; // 32-entry async FIFO; entry = {last,fcs_ok,data}
     reg [9:0] rxf_mem [0:(1<<RXF_DEPTH)-1]; // {last, fcs_ok, data[7:0]}
     reg [RXF_DEPTH:0] rxf_wptr; // rx_clk domain
     reg [RXF_DEPTH:0] rxf_rptr; // sys_clk domain
@@ -363,7 +378,7 @@ module mii_mac (
                     begin : flush
                         integer fi;
                         reg fcs_good;
-                        fcs_good = (rx_crc_r == 32'hC704DD7B);
+                        fcs_good = (rx_crc_r == 32'hDEBB20E3);
                         // Mark last byte with fcs_ok
                         // Note: pipe contains bytes including FCS; we skip last 4
                         // Simplified: mark last pushed byte as last+fcs
@@ -385,8 +400,7 @@ module mii_mac (
                         reg [7:0] byt;
                         byt = {rxd, rx_nib_lo};
                         // Update CRC
-                        rx_crc_r <= crc32_nibble(
-                                        crc32_nibble(rx_crc_r, rx_nib_lo), rxd);
+                        rx_crc_r <= rx_crc_hi_b3;  // after both nibbles of byte
                         // Push into pipeline (circular buffer of 4)
                         if (rx_pipe_fill < 4) begin
                             rx_pipe[rx_pipe_fill[1:0]] <= byt;

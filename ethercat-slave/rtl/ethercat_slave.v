@@ -87,11 +87,10 @@ module ethercat_slave (
     localparam AL_OP     = 4'h8;
 
     // ── Frame buffer ───────────────────────────────────────────────────────
-    // 512 B covers max EtherCAT mailbox frame (14+2+10+256 = 282 B).
-    // Keeping to 512 avoids expanding 2 KB into 16 384 flip-flops in yosys.
-    localparam FRAME_BUF_SZ = 7; // 2^7 = 128 bytes (fits typical micro-ROS VoE frames)
+    // 64 B covers the EtherCAT mailbox VoE frame (14 ETH + 2 EtherCAT + 10 DG + 8 mbx + 30 payload)
+    localparam FRAME_BUF_SZ = 6; // 2^6 = 64 bytes
     reg [7:0]  fbuf [0:(1<<FRAME_BUF_SZ)-1];
-    reg [7:0]  fbuf_len;     // received frame length (7-bit index fits 128)
+    reg [6:0]  fbuf_len;     // received frame length (7-bit fits 64)
 
     // ── Receive state machine ─────────────────────────────────────────────
     localparam RX_COLLECT  = 2'd0;
@@ -329,13 +328,13 @@ module ethercat_slave (
                         // SM0 written: master wrote to SM0 base address
                         if (dg_match &&
                             (dg_cmd == CMD_FPWR || dg_cmd == CMD_BWR || dg_cmd == CMD_APWR) &&
-                            dg_offset >= 16'h1000 && dg_offset < 16'h1100) begin
+                            dg_offset[15:8] == 8'h10) begin
                             sm0_written <= 1;
                         end
                         // SM1 read: master read from SM1 base address
                         if (dg_match &&
                             (dg_cmd == CMD_FPRD || dg_cmd == CMD_BRD || dg_cmd == CMD_APRD) &&
-                            dg_offset >= 16'h1100 && dg_offset < 16'h1200) begin
+                            dg_offset[15:8] == 8'h11) begin
                             sm1_read <= 1;
                         end
                     end

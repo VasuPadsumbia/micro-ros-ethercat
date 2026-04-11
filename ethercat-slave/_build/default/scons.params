@@ -1,4 +1,4 @@
-timestamp: "09021201527"
+timestamp: "11231851193"
 arch: GOWIN
 fpga_info {
   fpga_id: "gw2ar-lv18qn88c8-i7"
@@ -18,11 +18,11 @@ verbosity {
 environment {
   platform_id: "linux-x86-64"
   is_windows: false
-  terminal_mode: FORCE_TERMINAL
+  terminal_mode: FORCE_PIPE
   theme_name: "light"
   debug_level: 0
-  yosys_path: "/home/vasu/.apio/packages/oss-cad-suite/share/yosys"
-  trellis_path: "/home/vasu/.apio/packages/oss-cad-suite/share/trellis"
+  yosys_path: "/home/vasu/micro-ros-ethercat/tools/apio/packages/oss-cad-suite/share/yosys"
+  trellis_path: "/home/vasu/micro-ros-ethercat/tools/apio/packages/oss-cad-suite/share/trellis"
   scons_shell_id: "bash"
 }
 apio_env_params {

@@ -144,8 +144,8 @@ build_slave() {
     # and synthesises all .v files in rtl/ via oss-cad-suite
     (cd "$SLAVE_DIR" && "$VENV/bin/apio" build)
 
-    # apio writes the bitstream to hardware/
-    local fs_out="$SLAVE_DIR/hardware/top.fs"
+    # apio writes the bitstream to _build/default/hardware.fs
+    local fs_out="$SLAVE_DIR/_build/default/hardware.fs"
     [[ -f "$fs_out" ]] || { fail "apio build did not produce a bitstream at $fs_out"; exit 1; }
 
     ok "Build complete → $fs_out"
@@ -244,8 +244,52 @@ test_agent() {
 test_slave() {
     banner "Testing EtherCAT slave (cocotb + iverilog)"
     require_venv
-    "$VENV/bin/pytest" "$SLAVE_DIR/tests/" -v --tb=short
-    ok "Slave simulation tests passed"
+    local report_dir="$ROOT/data/test"
+    local tb_waves="$report_dir/tb_waves"
+    mkdir -p "$tb_waves"
+
+    # ── 1. Verilog smoke tests (sim/tb_*.v → standalone iverilog) ────────────
+    info "Running Verilog tb_ smoke tests..."
+    local tb_ok=0 tb_fail=0
+    for tb in "$SLAVE_DIR/sim"/tb_*.v; do
+        local name
+        name="$(basename "${tb%.v}")"
+        local vvp="$tb_waves/$name.vvp"
+        local vcd="$tb_waves/$name.vcd"
+        # Compile: determine which RTL file this tb needs
+        local rtl_file="$SLAVE_DIR/rtl/$(echo "$name" | sed 's/^tb_//').v"
+        if [[ ! -f "$rtl_file" ]]; then
+            info "  SKIP $name (RTL not found: $rtl_file)"
+            continue
+        fi
+        if iverilog -o "$vvp" -DCOCOTB_SIM=0 -g2012 "$tb" "$rtl_file" 2>/dev/null; then
+            local result
+            result=$(vvp "$vvp" "+vcd_file=$vcd" 2>&1)
+            if echo "$result" | grep -q "FAIL\|TIMEOUT"; then
+                fail "  FAIL $name"
+                echo "$result" | grep "FAIL\|TIMEOUT" >&2
+                tb_fail=$((tb_fail + 1))
+            else
+                ok "  PASS $name  (VCD → $vcd)"
+                tb_ok=$((tb_ok + 1))
+            fi
+        else
+            fail "  COMPILE ERROR $name"
+            tb_fail=$((tb_fail + 1))
+        fi
+    done
+    info "Verilog smoke tests: $tb_ok passed, $tb_fail failed"
+    [[ $tb_fail -eq 0 ]] || { fail "Verilog tb_ tests had failures"; exit 1; }
+
+    # ── 2. Cocotb regression tests (Python assertions, HTML report) ──────────
+    info "Running cocotb regression tests..."
+    "$VENV/bin/pytest" "$SLAVE_DIR/tests/" \
+        --html="$report_dir/report.html" \
+        --self-contained-html \
+        -v --tb=short
+    ok "All tests passed  →  HTML report: $report_dir/report.html"
+    ok "               →  Verilog VCDs:  $tb_waves/"
+    ok "               →  cocotb waves:  $report_dir/waves/"
 }
 
 test_firmware() {
@@ -288,7 +332,7 @@ do_load_ecat() {
     setup_log "load-ecat.log"
     banner "Flashing Tang Nano 20K (EtherCAT slave)"
     require_venv
-    [[ -f "$SLAVE_DIR/hardware/top.fs" ]] || { fail "Bitstream not found. Run: ./run.sh --build slave"; exit 1; }
+    [[ -f "$SLAVE_DIR/_build/default/hardware.fs" ]] || { fail "Bitstream not found. Run: ./run.sh --build slave"; exit 1; }
     info "Flashing via apio upload..."
     (cd "$SLAVE_DIR" && "$VENV/bin/apio" upload)
     ok "Tang Nano 20K flashed successfully"

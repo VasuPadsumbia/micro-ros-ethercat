@@ -34,16 +34,16 @@ bash setup.sh
 source .venv/bin/activate
 
 # Build everything
-python script.py --build all
+./run.sh --build all
 
 # Flash FPGA
-python script.py --run flash-slave
+./run.sh --run flash-slave
 
 # Flash ESP32 (connect via USB first)
-python script.py --run flash-firmware --port /dev/ttyUSB0
+./run.sh --run flash-firmware --port /dev/ttyUSB0
 
 # Run agent (replace eth0 with your EtherCAT interface)
-python script.py --run agent --eth eth0
+./run.sh --run agent --eth eth0
 ```
 
 ## Step-by-Step
@@ -107,7 +107,7 @@ Standard Cat5e cable from PC Ethernet port to RJ45 of DP83848 #1.
 
 **Option A: Open-source (Yosys + nextpnr)**
 ```bash
-python script.py --build slave
+./run.sh --build slave
 ```
 
 **Option B: Gowin IDE**
@@ -131,7 +131,7 @@ python ethercat-slave/eeprom/gen_eeprom.py
 ### 4. Flash FPGA
 
 ```bash
-python script.py --run flash-slave
+./run.sh --run flash-slave
 # Uses openFPGALoader with Tang Nano 20K profile
 ```
 
@@ -142,19 +142,19 @@ python script.py --run flash-slave
 source ~/esp/esp-idf/export.sh
 
 # Build
-python script.py --build firmware
+./run.sh --build firmware
 
 # Flash (replace /dev/ttyUSB0 with your port)
-python script.py --run flash-firmware --port /dev/ttyUSB0
+./run.sh --run flash-firmware --port /dev/ttyUSB0
 ```
 
 ### 6. Build and Run PC Agent
 
 ```bash
-python script.py --build agent
+./run.sh --build agent
 
 # Run (requires root for raw socket)
-python script.py --run agent --eth eth0
+./run.sh --run agent --eth eth0
 ```
 
 Or directly:
@@ -186,16 +186,16 @@ ros2 topic pub --once /esp32/cmd std_msgs/String "data: 'hello'"
 source .venv/bin/activate
 
 # FPGA simulation tests (cocotb + iverilog)
-python script.py --test slave
+./run.sh --test slave
 
 # Firmware tests (on-hardware, ESP32 connected)
-python script.py --test firmware
+./run.sh --test firmware
 
 # Agent unit tests (Google Test, no hardware needed)
-python script.py --test agent
+./run.sh --test agent
 
 # All tests
-python script.py --test all
+./run.sh --test all
 ```
 
 ## Troubleshooting

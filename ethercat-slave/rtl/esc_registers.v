@@ -89,12 +89,14 @@ module esc_registers (
     // Byte b of SM g = sm_r[g][b*8 +: 8]
     reg [63:0] sm_r [0:7];
 
-    // Process data RAM — 512 bytes covers SM0 (0x1000-0x10FF) + SM1 (0x1100-0x11FF).
-    // Async read prevents BRAM inference; keep small to avoid register explosion.
+    // Process data RAM — 128 bytes covers SM0 (0x1000-0x107F).
+    // Synchronous read enables BRAM inference on GW2AR-18.
     reg [7:0]  pd_ram [0:127];  // 128 bytes: 0x1000-0x107F
+    reg [7:0]  pd_ram_rdata;
 
-    // ── EEPROM shadow (first 128 words cached) ────────────────────────────
-    reg [7:0]  eeprom_cache [0:63];  // 32 words = 64 bytes
+    // ── EEPROM shadow (first 16 words = 32 bytes cached) ─────────────────
+    reg [7:0]  eeprom_cache [0:31];  // 16 words = 32 bytes
+    reg [7:0]  eeprom_cache_rdata_lo, eeprom_cache_rdata_hi;
     reg        eeprom_cache_valid;
 
     // ── Output wiring ─────────────────────────────────────────────────────
@@ -149,18 +151,23 @@ module esc_registers (
         16'h0503: ec_rdata = eeprom_ctrl_r[3];
         16'h0504: ec_rdata = eeprom_addr_r[0];
         16'h0505: ec_rdata = eeprom_addr_r[1];
-        16'h0506: ec_rdata = eeprom_cache_valid ?
-                             eeprom_cache[{eeprom_addr_r[0][4:0], 1'b0}] : 8'hFF;
-        16'h0507: ec_rdata = eeprom_cache_valid ?
-                             eeprom_cache[{eeprom_addr_r[0][4:0], 1'b1}] : 8'hFF;
+        16'h0506: ec_rdata = eeprom_cache_valid ? eeprom_cache_rdata_lo : 8'hFF;
+        16'h0507: ec_rdata = eeprom_cache_valid ? eeprom_cache_rdata_hi : 8'hFF;
         // SyncManagers 0x0800-0x087F
         16'h08??: begin
             ec_rdata = sm_r[ec_addr[6:3]][ec_addr[2:0]*8 +: 8];
         end
-        // Process data RAM (128 B: 0x1000-0x107F)
-        16'h10??: ec_rdata = pd_ram[ec_addr[6:0]];
+        // Process data RAM (128 B: 0x1000-0x107F) — synchronous read registered output
+        16'h10??: ec_rdata = pd_ram_rdata;
         default: ec_rdata = 8'hFF;
         endcase
+    end
+
+    // Synchronous read for pd_ram and eeprom_cache (enables BRAM inference)
+    always @(posedge clk) begin
+        pd_ram_rdata          <= pd_ram[ec_addr[6:0]];
+        eeprom_cache_rdata_lo <= eeprom_cache[{eeprom_addr_r[0][3:0], 1'b0}];
+        eeprom_cache_rdata_hi <= eeprom_cache[{eeprom_addr_r[0][3:0], 1'b1}];
     end
 
     // ── EtherCAT register write ───────────────────────────────────────────
@@ -200,10 +207,10 @@ module esc_registers (
                 endcase
             end
 
-            // Cache EEPROM read result
-            if (eeprom_ack) begin
-                eeprom_cache[{eeprom_addr_r[0][4:0], 1'b0}] <= eeprom_rdata[7:0];
-                eeprom_cache[{eeprom_addr_r[0][4:0], 1'b1}] <= eeprom_rdata[15:8];
+            // Cache EEPROM read result (only first 16 words = 32 bytes)
+            if (eeprom_ack && eeprom_addr_r[0][7:4] == 4'h0) begin
+                eeprom_cache[{eeprom_addr_r[0][3:0], 1'b0}] <= eeprom_rdata[7:0];
+                eeprom_cache[{eeprom_addr_r[0][3:0], 1'b1}] <= eeprom_rdata[15:8];
                 eeprom_cache_valid <= 1;
                 // Update status: clear busy bit
                 eeprom_ctrl_r[1]  <= 8'h80; // eeprom loaded, no error

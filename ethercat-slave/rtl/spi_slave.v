@@ -147,6 +147,7 @@ module spi_slave (
     reg [7:0]  tx_fifo [0:3];  // small TX header buffer
     reg [2:0]  tx_head;        // next byte to send
     reg [2:0]  tx_tail;
+    reg [7:0]  status_flags_r; // latched status for STATUS command response
 
     always @(posedge sys_clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -164,6 +165,7 @@ module spi_slave (
             tx_byte       <= 0;
             tx_head       <= 0;
             tx_tail       <= 0;
+            status_flags_r <= 0;
         end else begin
             mbox_wr_valid <= 0;
             mbox_wr_start <= 0;
@@ -190,7 +192,8 @@ module spi_slave (
                     8'h02: begin // Read — send LEN_H next
                         tx_byte <= 8'h00; // LEN_H placeholder (updated in LEN_H state)
                     end
-                    8'h03: begin // Status
+                    8'h03: begin // Status — latch flags now, hold tx_byte through LEN_H/LEN_L
+                        status_flags_r <= {6'h00, status_tx_ready, status_rx_avail};
                         tx_byte <= {6'h00, status_tx_ready, status_rx_avail};
                     end
                     default: tx_byte <= 8'hFF;
@@ -202,9 +205,9 @@ module spi_slave (
                     payload_len[15:8] <= rx_shift;
                     rx_crc            <= crc8_byte(rx_crc, rx_shift);
                     if (cmd == 8'h02) begin
-                        // For read, master sends 0x00 0x00 length; we respond with actual len
-                        // Pre-load TX with actual available length (16-bit)
-                        tx_byte <= 8'h00; // will be LEN_L in next cycle
+                        tx_byte <= 8'h00; // LEN_L placeholder for read
+                    end else if (cmd == 8'h03) begin
+                        tx_byte <= status_flags_r; // keep flags byte visible
                     end
                     frame_state <= F_LEN_L;
                 end
@@ -218,15 +221,17 @@ module spi_slave (
                         mbox_wr_len   <= {payload_len[15:8], rx_shift};
                         mbox_wr_start <= 1;
                         frame_state   <= F_DATA;
+                        tx_byte       <= 8'h00;
                     end else if (cmd == 8'h02) begin
                         // Read — start sending mailbox data
                         mbox_rd_req <= 1;
                         frame_state <= F_DATA;
+                        tx_byte     <= 8'h00;
                     end else begin
                         // Status or zero-length write — go straight to CRC
+                        // Keep tx_byte as status_flags_r for STATUS cmd
                         frame_state <= F_CRC;
                     end
-                    tx_byte <= 8'h00; // first data byte placeholder
                 end
 
                 F_DATA: begin
@@ -265,9 +270,9 @@ module spi_slave (
                 tx_byte <= mbox_rd_data;
             end
 
-            // On tx_byte_load during STATUS cmd, update tx_byte from pre-computed values
-            if (tx_byte_load && frame_state == F_LEN_H && cmd == 8'h03) begin
-                tx_byte <= 8'h00; // Reserved
+            // On tx_byte_load during STATUS cmd, hold the latched flags
+            if (tx_byte_load && cmd == 8'h03 && frame_state == F_LEN_H) begin
+                tx_byte <= status_flags_r;
             end
 
         end // not rst

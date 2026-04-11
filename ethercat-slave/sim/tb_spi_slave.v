@@ -51,8 +51,8 @@ module tb_spi_slave;
     always #18.5 sys_clk = ~sys_clk; // ~27 MHz
 
     // ── SPI master tasks ──────────────────────────────────────────────────
-    // SPI period = 125 ns (8 MHz)
-    localparam SPI_HALF = 62;   // ns
+    // SPI period = 400 ns (2.5 MHz) to allow for 3-cycle MISO synchronizer
+    localparam SPI_HALF = 200;  // ns
 
     task spi_byte;
         input  [7:0] send;
@@ -72,7 +72,6 @@ module tb_spi_slave;
     endtask
 
     task spi_write_mbox;
-        input [7:0] payload [0:7];
         input integer len;
         integer i;
         reg [7:0] dummy;
@@ -108,7 +107,7 @@ module tb_spi_slave;
 
     task check;
         input cond;
-        input [127:0] msg;
+        input [511:0] msg;
         begin
             if (!cond) begin
                 $display("FAIL: %s at time %0t", msg, $time);
@@ -124,7 +123,13 @@ module tb_spi_slave;
     integer k;
 
     initial begin
-        $dumpfile("tb_spi_slave.vcd");
+        begin : vcd_dump
+            string vcd_path;
+            if ($value$plusargs("vcd_file=%s", vcd_path))
+                $dumpfile(vcd_path);
+            else
+                $dumpfile("tb_spi_slave.vcd");
+        end
         $dumpvars(0, tb_spi_slave);
 
         // Reset
@@ -143,7 +148,7 @@ module tb_spi_slave;
         // ── Test 2: Write mailbox (4 payload bytes) ───────────────────────
         payload[0] = 8'h00; payload[1] = 8'h00; // mailbox header placeholder
         payload[2] = 8'hAA; payload[3] = 8'hBB;
-        spi_write_mbox(payload, 4);
+        spi_write_mbox(4);
         #100;
         check(mbox_wr_valid === 1'bx || mbox_wr_len == 4,
               "WRITE: mbox_wr_len correct");
@@ -151,7 +156,7 @@ module tb_spi_slave;
         // ── Test 3: Back-to-back transactions ─────────────────────────────
         for (k = 0; k < 3; k = k + 1) begin
             payload[0] = k;
-            spi_write_mbox(payload, 1);
+            spi_write_mbox(1);
             #50;
         end
 

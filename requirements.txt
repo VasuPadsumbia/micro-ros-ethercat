@@ -1,5 +1,6 @@
 # Core simulation and testing
 pytest>=7.4
+pytest-html>=4.1        # graphical HTML test report (data/test/report.html)
 cocotb>=1.8,<2.0   # cocotb 2.x requires Python <=3.13; use 1.x for 3.12 compat
 cocotb-bus>=0.2
 

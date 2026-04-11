@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS
+        "test_spi_transport.c"
+        "../../main/spi_transport.c"
+    INCLUDE_DIRS
+        "."
+        "../../main"
+    REQUIRES
+        unity
+        driver
+        esp_timer
+        freertos
+        micro_ros_espidf_component
+)

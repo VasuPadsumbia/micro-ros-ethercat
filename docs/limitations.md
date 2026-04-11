@@ -80,7 +80,6 @@
 
 | Issue | Severity | Workaround |
 |-------|----------|-----------|
-| MII RX pipeline may lose last byte on short frames | Medium | Pad frames to minimum 64 bytes (standard Ethernet minimum) |
 | Gowin nextpnr timing closure may fail at high utilisation | Low | Use Gowin IDE synthesiser which has better timing optimization |
 | `spi_crc8` test vector for `{0x01,0x02,0x03}` is hardcoded | Low | Regenerate expected value with a reference implementation if polynomial is changed |
 | AT24C256 word address is restricted to 14 bits | Low | Only the lower 14 bits of the word address are used; upper bits ignored |

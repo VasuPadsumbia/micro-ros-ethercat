@@ -1,14 +1,14 @@
 # User Guide
 
-## script.py — Project Orchestrator
+## run.sh — Project Orchestrator
 
-All project operations are driven from `script.py` in the workspace root.
+All project operations are driven from `run.sh` in the workspace root.
 
 ```
-python script.py --build [all|firmware|slave|agent]
-python script.py --clean [all|firmware|slave|agent]
-python script.py --test  [all|firmware|slave|agent]
-python script.py --run   [agent|flash-firmware|flash-slave]
+./run.sh --build [all|firmware|slave|agent]
+./run.sh --clean [all|firmware|slave|agent]
+./run.sh --test  [all|firmware|slave|agent]
+./run.sh --run   [agent|flash-firmware|flash-slave]
 ```
 
 ### --build
@@ -21,8 +21,8 @@ python script.py --run   [agent|flash-firmware|flash-slave]
 | `all` | All three in order: firmware → slave → agent |
 
 ```bash
-python script.py --build agent
-python script.py --build all
+./run.sh --build agent
+./run.sh --build all
 ```
 
 ### --test
@@ -35,8 +35,8 @@ python script.py --build all
 | `all` | All three |
 
 ```bash
-python script.py --test agent
-python script.py --test slave
+./run.sh --test agent
+./run.sh --test slave
 ```
 
 ### --clean
@@ -49,7 +49,7 @@ python script.py --test slave
 | `all` | All three |
 
 ```bash
-python script.py --clean all
+./run.sh --clean all
 ```
 
 ### --run
@@ -61,9 +61,9 @@ python script.py --clean all
 | `flash-slave` | Flashes FPGA bitstream via `openFPGALoader` |
 
 ```bash
-python script.py --run agent --eth enp3s0
-python script.py --run flash-firmware --port /dev/ttyUSB0 --baud 460800
-python script.py --run flash-slave
+./run.sh --run agent --eth enp3s0
+./run.sh --run flash-firmware --port /dev/ttyUSB0 --baud 460800
+./run.sh --run flash-slave
 ```
 
 ### Options
@@ -96,7 +96,7 @@ sudo ./agent/build/micro_ros_ethercat_agent --iface eth0 --slave 1
 
 Or via the build script:
 ```bash
-python script.py --run agent --eth eth0
+./run.sh --run agent --eth eth0
 ```
 
 **LED status (Tang Nano 20K):**
@@ -154,8 +154,8 @@ For rates > 100 Hz, consider PDO (Process Data Object) mapping instead.
 ### Adding Custom Topics
 
 1. In `firmware/main/main.c`, add publisher/subscriber using rclc API
-2. Rebuild firmware: `python script.py --build firmware`
-3. Flash: `python script.py --run flash-firmware`
+2. Rebuild firmware: `./run.sh --build firmware`
+3. Flash: `./run.sh --run flash-firmware`
 
 ## SPI Transport Protocol Reference
 
