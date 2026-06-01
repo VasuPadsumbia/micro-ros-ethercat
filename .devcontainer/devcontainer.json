@@ -35,7 +35,7 @@
     }
   },
 
-  "postCreateCommand": "bash -c 'source /opt/ros/humble/setup.bash 2>/dev/null || echo \"ROS setup skipped\"; echo Dev container ready!'",
+  "postCreateCommand": "bash -c 'source /opt/ros/humble/setup.bash 2>/dev/null || true; echo \"Running one-time setup (ESP-IDF + micro-ROS colcon build — ~60 min on first start)...\"; bash setup.sh && echo \"Setup complete. Run ./run.sh --build firmware to build ESP32 firmware.\"'",
 
   "forwardPorts": [8888],
   "portsAttributes": {

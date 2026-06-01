@@ -166,7 +166,8 @@ CRC: CRC-8 (poly 0x07) over CMD + LEN + payload
 |----------|-------------|
 | [docs/architecture.md](docs/architecture.md) | System architecture and data flow |
 | [docs/installation.md](docs/installation.md) | Detailed installation steps |
-| [docs/user_guide.md](docs/user_guide.md) | Usage and configuration |
+| [docs/wiring.md](docs/wiring.md) | Pin assignments, circuit diagrams, resistor guide |
+| [docs/user_guide.md](docs/user_guide.md) | Usage, configuration, EtherCAT slave config |
 | [docs/limitations.md](docs/limitations.md) | Known limitations |
 
 ---

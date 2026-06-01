@@ -1,9 +1,9 @@
 // ============================================================================
-// top.v — Tang Nano 20K top-level: micro-ROS EtherCAT Slave
+// top.v — Tang Nano 20K top-level: micro-ROS EtherCAT Slave (single-port)
 //
 // Instantiates:
-//   mdio_ctrl      — PHY initialisation (Port 0 only)
-//   mii_mac        — MII MAC for PHY0 (Port 0)
+//   mdio_ctrl      — PHY0 initialisation
+//   mii_mac        — MII MAC for PHY0 (Port 0, master-facing)
 //   ethercat_slave — EtherCAT datagram processing
 //   esc_registers  — ESC register file + process data RAM
 //   mailbox        — SM0/SM1 mailbox buffers
@@ -15,45 +15,47 @@
 //   tx_clk0 — 25 MHz from PHY0 TX_CLK (MII TX)
 //   rx_clk0 — 25 MHz from PHY0 RX_CLK (MII RX)
 //
-// Single-slave topology: Port 1 removed (no downstream slave).
 // Pin assignments: see constraints/tang_nano_20k.cst
+// Configuration  : see rtl/slave_config.vh (generated from config.in)
 // ============================================================================
+`include "slave_config.vh"
+
 module top (
-    // ── System clock / reset ──────────────────────────────────────────
+    // ── System clock / reset ──────────────────────────────────────────────
     input  wire        clk_27,
-    input  wire        btn_rst_n,   // active-low reset button (Tang Nano User BTN)
+    input  wire        btn_rst_n,    // active-low reset button
 
-    // ── PHY0 MII (Port 0 — connects to EtherCAT master) ──────────────
-    input  wire        p0_tx_clk,
-    output wire [3:0]  p0_txd,
-    output wire        p0_tx_en,
-    output wire        p0_tx_er,
+    // ── PHY0 MII — LEFT header (high-speed data) ──────────────────────────
+    input  wire        p0_tx_clk,    // 25 MHz TX clock FROM PHY → FPGA
+    output wire [3:0]  p0_txd,       // nibble data FPGA → PHY
+    output wire        p0_tx_en,     // transmit enable
 
-    input  wire        p0_rx_clk,
-    input  wire [3:0]  p0_rxd,
-    input  wire        p0_rx_dv,
-    input  wire        p0_rx_er,
+    input  wire        p0_rx_clk,    // 25 MHz RX clock FROM PHY → FPGA
+    input  wire [3:0]  p0_rxd,       // received nibble PHY → FPGA
+    input  wire        p0_rx_dv,     // receive data valid
+    input  wire        p0_rx_er,     // receive error
 
-    output wire        p0_mdc,
-    inout  wire        p0_mdio,
-    output wire        p0_rst_n,
+    // ── PHY0 management — RIGHT header ────────────────────────────────────
+    output wire        p0_mdc,       // MDIO clock (≤ 2.5 MHz)
+    inout  wire        p0_mdio,      // MDIO data (open-drain)
+    output wire        p0_rst_n,     // active-low PHY reset
 
-    // ── SPI slave (to ESP32) ──────────────────────────────────────────
+    // ── SPI slave (to ESP32) — RIGHT header ───────────────────────────────
     input  wire        spi_sck,
     input  wire        spi_mosi,
     output wire        spi_miso,
     input  wire        spi_cs_n,
-    output wire        spi_int_n,   // active-low interrupt to ESP32
+    output wire        spi_int_n,    // active-low interrupt to ESP32
 
-    // ── I2C (to AT24C256 EEPROM) ─────────────────────────────────────
-    output wire        i2c_scl,
-    inout  wire        i2c_sda,
+    // ── I2C master (to AT24C256 EEPROM) — RIGHT header ────────────────────
+    inout  wire        i2c_scl,      // open-drain (4.7 kΩ pull-up required)
+    inout  wire        i2c_sda,      // open-drain (4.7 kΩ pull-up required)
 
-    // ── Status LEDs (Tang Nano 20K: 6 LEDs, active-low) ─────────────
+    // ── Onboard status LEDs (active-low, no external wiring) ──────────────
     output wire [5:0]  led_n
 );
 
-    // ── Reset synchroniser ────────────────────────────────────────────────
+    // ── Reset synchroniser (2-FF) ─────────────────────────────────────────
     reg [3:0] rst_sync;
     wire      rst_n = rst_sync[3];
 
@@ -64,44 +66,40 @@ module top (
             rst_sync <= {rst_sync[2:0], 1'b1};
     end
 
-    // Hold PHYs in reset for first 32 cycles, then release
+    // Hold PHY in reset until FPGA is stable (~2 µs @ 27 MHz for 64 cycles)
     reg [5:0] phy_rst_cnt;
     reg       phy_rst_done;
+
     always @(posedge clk_27 or negedge rst_n) begin
         if (!rst_n) begin
-            phy_rst_cnt  <= 0;
-            phy_rst_done <= 0;
+            phy_rst_cnt  <= 6'd0;
+            phy_rst_done <= 1'b0;
         end else if (!phy_rst_done) begin
-            if (&phy_rst_cnt) phy_rst_done <= 1;
-            else phy_rst_cnt <= phy_rst_cnt + 1;
+            if (&phy_rst_cnt)
+                phy_rst_done <= 1'b1;
+            else
+                phy_rst_cnt <= phy_rst_cnt + 1'b1;
         end
     end
 
     assign p0_rst_n = phy_rst_done;
-    assign p1_rst_n = phy_rst_done;
 
     // ── MDIO controller ───────────────────────────────────────────────────
     wire mdio_init_done;
     wire mdio0_oe, mdio0_out;
-    wire mdio1_oe, mdio1_out;
 
-    mdio_ctrl mdio_u (
+    mdio_ctrl #(.MDC_DIV(`MDC_DIV)) mdio_u (
         .clk        (clk_27),
         .rst_n      (rst_n),
         .init_done  (mdio_init_done),
-        .mdc0       (p0_mdc),
-        .mdio0_oe   (mdio0_oe),
-        .mdio0_out  (mdio0_out),
-        .mdio0_in   (p0_mdio),
-        .mdc1       (p1_mdc),
-        .mdio1_oe   (mdio1_oe),
-        .mdio1_out  (mdio1_out),
-        .mdio1_in   (p1_mdio)
+        .mdc        (p0_mdc),
+        .mdio_oe    (mdio0_oe),
+        .mdio_out   (mdio0_out),
+        .mdio_in    (p0_mdio)
     );
 
-    // MDIO open-drain: drive low via OE, release for high
+    // MDIO open-drain: drive 0 via tristate buffer, release for 1
     assign p0_mdio = mdio0_oe ? (mdio0_out ? 1'bz : 1'b0) : 1'bz;
-    assign p1_mdio = mdio1_oe ? (mdio1_out ? 1'bz : 1'b0) : 1'bz;
 
     // ── MII MAC Port 0 ────────────────────────────────────────────────────
     wire [7:0]  p0_rx_data;
@@ -115,7 +113,7 @@ module top (
         .tx_clk   (p0_tx_clk),
         .txd      (p0_txd),
         .tx_en    (p0_tx_en),
-        .tx_er    (p0_tx_er),
+        .tx_er    (),            // not driven — PHY ignores when low
         .rx_clk   (p0_rx_clk),
         .rxd      (p0_rxd),
         .rx_dv    (p0_rx_dv),
@@ -131,13 +129,6 @@ module top (
         .rx_fcs_ok(p0_rx_fcs_ok),
         .rx_ready (p0_rx_ready)
     );
-
-    // Port 1 MAC (instantiated but only connected when Port 1 open)
-    // For single-slave use, Port 1 can be left unconnected.
-    // txd/tx_en driven to 0, rx ignored.
-    assign p1_txd   = 4'h0;
-    assign p1_tx_en = 1'b0;
-    assign p1_tx_er = 1'b0;
 
     // ── ESC register file ─────────────────────────────────────────────────
     wire [15:0] esc_addr;
@@ -156,7 +147,7 @@ module top (
     wire [15:0] eeprom_rdata;
     wire        eeprom_ack;
 
-    wire [511:0] sm_cfg; // 8 SMs × 64 bits, flat packed — Verilog-2001 compatible
+    wire [511:0] sm_cfg;
 
     esc_registers esc_regs (
         .clk              (clk_27),
@@ -224,16 +215,16 @@ module top (
     wire        mbox_out_ready, mbox_in_ready;
 
     mailbox #(
-        .MBX_OUT_BASE(16'h1000),
-        .MBX_OUT_SIZE(16'd256),
-        .MBX_IN_BASE (16'h1100),
-        .MBX_IN_SIZE (16'd256)
+        .MBX_OUT_BASE(`MBX_OUT_BASE),
+        .MBX_OUT_SIZE(`MBX_OUT_SIZE),
+        .MBX_IN_BASE (`MBX_IN_BASE),
+        .MBX_IN_SIZE (`MBX_IN_SIZE)
     ) mbox (
         .clk           (clk_27),
         .rst_n         (rst_n),
         .ec_addr       (esc_addr),
         .ec_wdata      (esc_wdata),
-        .ec_rdata      (),        // mbox rdata merged in esc_registers
+        .ec_rdata      (),
         .ec_wr         (esc_wr),
         .ec_rd         (esc_rd),
         .sm0_written   (sm0_written),
@@ -275,7 +266,6 @@ module top (
     wire i2c_busy, i2c_rdata_valid;
     wire [7:0] i2c_rdata;
 
-    // EEPROM SII read controller (reads 16-bit words on request)
     reg         eeprom_read_pending;
     reg [15:0]  eeprom_word_addr_r;
     reg [15:0]  eeprom_buf;
@@ -287,38 +277,38 @@ module top (
 
     always @(posedge clk_27 or negedge rst_n) begin
         if (!rst_n) begin
-            eeprom_read_pending <= 0;
-            eeprom_word_addr_r  <= 0;
-            eeprom_buf          <= 0;
-            eeprom_ack_r        <= 0;
-            eeprom_byte_cnt     <= 0;
+            eeprom_read_pending <= 1'b0;
+            eeprom_word_addr_r  <= 16'd0;
+            eeprom_buf          <= 16'd0;
+            eeprom_ack_r        <= 1'b0;
+            eeprom_byte_cnt     <= 2'd0;
         end else begin
-            eeprom_ack_r <= 0;
+            eeprom_ack_r <= 1'b0;
             if (eeprom_req && !i2c_busy) begin
-                eeprom_read_pending <= 1;
+                eeprom_read_pending <= 1'b1;
                 eeprom_word_addr_r  <= eeprom_word_addr;
-                eeprom_byte_cnt     <= 0;
+                eeprom_byte_cnt     <= 2'd0;
             end
             if (i2c_rdata_valid) begin
-                if (eeprom_byte_cnt == 0)
-                    eeprom_buf[7:0] <= i2c_rdata;
+                if (eeprom_byte_cnt == 2'd0)
+                    eeprom_buf[7:0]  <= i2c_rdata;
                 else begin
                     eeprom_buf[15:8] <= i2c_rdata;
-                    eeprom_ack_r     <= 1;
-                    eeprom_read_pending <= 0;
+                    eeprom_ack_r     <= 1'b1;
+                    eeprom_read_pending <= 1'b0;
                 end
-                eeprom_byte_cnt <= eeprom_byte_cnt + 1;
+                eeprom_byte_cnt <= eeprom_byte_cnt + 2'd1;
             end
         end
     end
 
-    i2c_master #(.CLK_DIV(67)) i2c (
+    i2c_master #(.CLK_DIV(`I2C_CLK_DIV)) i2c (
         .clk        (clk_27),
         .rst_n      (rst_n),
         .start      (eeprom_req),
-        .dev_addr   (7'h50),          // AT24C256: A2A1A0=000 → 0x50
-        .word_addr  ({1'b0, eeprom_word_addr[14:0]}), // byte address = word×2
-        .rd_len     (8'd2),            // read 2 bytes per word
+        .dev_addr   (`EEPROM_I2C_ADDR),
+        .word_addr  ({1'b0, eeprom_word_addr[14:0]}), // byte addr = word×2
+        .rd_len     (8'd2),
         .busy       (i2c_busy),
         .rdata_valid(i2c_rdata_valid),
         .rdata      (i2c_rdata),
@@ -329,22 +319,22 @@ module top (
         .sda_in     (i2c_sda)
     );
 
-    // Open-drain I2C outputs
+    // Open-drain I2C: pull low via OE, float for high
     assign i2c_scl = scl_oe ? 1'b0 : 1'bz;
     assign i2c_sda = sda_oe ? 1'b0 : 1'bz;
 
-    // ── LED status ────────────────────────────────────────────────────────
-    // LED0: power on
-    // LED1: MDIO init done
-    // LED2: EtherCAT operational (OP state)
-    // LED3: mailbox out ready (data for ESP32)
-    // LED4: mailbox in ready  (data for master)
-    // LED5: unused
-    assign led_n[0] = 1'b0;               // always on
+    // ── LED status (active-low) ───────────────────────────────────────────
+    // LED0: FPGA powered (always on)
+    // LED1: PHY MDIO init complete
+    // LED2: EtherCAT in OPERATIONAL state
+    // LED3: Mailbox data pending for ESP32 (SM0 written by master)
+    // LED4: Mailbox data ready for master (SM1 written by ESP32)
+    // LED5: spare / error indicator
+    assign led_n[0] = 1'b0;
     assign led_n[1] = ~mdio_init_done;
     assign led_n[2] = ~(al_state == 4'h8);
     assign led_n[3] = ~mbox_out_ready;
     assign led_n[4] = ~mbox_in_ready;
-    assign led_n[5] = 1'b1;               // off
+    assign led_n[5] = 1'b1;
 
 endmodule

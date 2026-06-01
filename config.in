@@ -19,9 +19,41 @@ BAUD_RATE=460800
 # Release | Debug
 CMAKE_BUILD_TYPE=Release
 
-# ── EtherCAT slave number ─────────────────────────────────────────────────────
+# ── EtherCAT agent slave index ────────────────────────────────────────────────
 # Which SOEM slave index the micro-ROS transport targets (1-based).
 ETHERCAT_SLAVE=1
+
+# ── EtherCAT slave FPGA configuration ────────────────────────────────────────
+# Baked into the FPGA bitstream via ethercat-slave/rtl/slave_config.vh.
+# Run './run.sh --build slave' after changing any of these.
+
+# PHY0 MDIO address (0-31).  Must match PHYAD[4:0] strap resistors on your
+# DP83848 module.  Typical SZYTF module: PHYAD = 1.
+EC_PHY_ADDR=1
+
+# EtherCAT configured station address (decimal, 1-65535).
+# The EtherCAT master overwrites this during initialisation; this is the
+# power-on default only.
+EC_STATION_ADDR=1
+
+# Mailbox SyncManager base addresses (decimal) and sizes (bytes).
+# SM0 = master→slave;  SM1 = slave→master.
+EC_MBX_OUT_BASE=4096   # 0x1000
+EC_MBX_OUT_SIZE=256
+EC_MBX_IN_BASE=4352    # 0x1100
+EC_MBX_IN_SIZE=256
+
+# AT24C256 EEPROM 7-bit I2C address (decimal).
+# A2A1A0 all tied to GND → address 80 (0x50).
+EC_EEPROM_ADDR=80
+
+# MDC clock divider.  MDC = sys_clk / (2 * EC_MDC_DIV).  Must give ≤ 2.5 MHz.
+# 27 MHz / (2*6) = 2.25 MHz.
+EC_MDC_DIV=6
+
+# I2C clock divider.  SCL = sys_clk / (4 * EC_I2C_CLK_DIV).
+# 27 MHz / (4*67) ≈ 100 kHz.
+EC_I2C_CLK_DIV=67
 
 # ── Paths (relative to project root; normally no need to change) ──────────────
 FIRMWARE_DIR=firmware

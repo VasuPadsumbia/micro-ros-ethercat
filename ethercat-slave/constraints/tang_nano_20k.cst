@@ -1,148 +1,76 @@
 // ============================================================================
-// tang_nano_20k.cst — Physical constraint file for Gowin GW2AR-18
+// tang_nano_20k.cst — Physical constraints for Gowin GW2AR-18 QFN88
 //
-// Tang Nano 20K pin assignments for micro-ROS EtherCAT slave
+// micro-ROS EtherCAT slave — VERIFIED pin assignments
 //
-// VERIFY all pin numbers against your board schematic before synthesis.
-// Numbers below are based on the Tang Nano 20K GW2AR-18 QFN88 package.
-// The 40-pin expansion header (J2) provides GPIO:
-//   Pins 1-20 on left rail, 21-40 on right rail.
+// Only pins that physically exist on the Tang Nano 20K expansion headers are
+// used.  See docs/wiring.md for circuit diagrams and resistor requirements.
 //
-// DP83848 MII connections (see hardware/wiring.md for full schematic):
-//   TX_CLK is an INPUT from PHY (25 MHz at 100Mbps)
-//   RX_CLK is an INPUT from PHY
-//   MDIO is bidirectional open-drain
+// Available expansion-header FPGA IO numbers:
+//   Left  (J2): 73 74 75 77  25 26 27 28 29 30 31  15 16 17 18 19 20
+//   Right (J3): 41 42 48 49 51 52 53 54 55 56  71 72 76 79 80 86
+//   Fixed     : 4 (27 MHz XTAL in), 88 (user button)
+//
+// Module grouping:
+//   LEFT  = PHY0 MII high-speed signals (TX path + RX data) + onboard LEDs
+//   RIGHT = PHY0 management (MDC/MDIO/RST/RX_DV/RX_ER) + SPI (ESP32) + I2C (EEPROM)
 // ============================================================================
 
-// ── System clock (27 MHz XTAL) ────────────────────────────────────────────
-IO_LOC "clk_27"    4;   // CLKIN on Tang Nano 20K
-IO_PORT "clk_27"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+// ── System clock (27 MHz XTAL — fixed on Tang Nano 20K) ──────────────────
+IO_LOC "clk_27"     4;
+IO_PORT "clk_27"    PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
-// ── Reset button ──────────────────────────────────────────────────────────
-IO_LOC "btn_rst_n" 88;
+// ── Reset button (USER BTN — fixed, active-low) ───────────────────────────
+IO_LOC "btn_rst_n"  88;
 IO_PORT "btn_rst_n" PULL_MODE=UP IO_TYPE=LVCMOS33;
 
-// ── PHY0 MII (DP83848 #1 — Port 0, connects to EtherCAT master) ─────────
-// TX path (FPGA drives, referenced to PHY TX_CLK)
-IO_LOC "p0_tx_clk"  25;
-IO_PORT "p0_tx_clk"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
+// ─────────────────────────────────────────────────────────────────────────────
+// LEFT SIDE (J2) — PHY0 MII
+//
+// DP83848 module wires to LEFT header only for high-speed MII signals.
+// Connect from left header top-to-bottom:
+//   IO73 ← TX_CLK   IO74 → TXD0   IO75 → TXD1   IO77 → TXD2
+//   IO25 → TXD3     IO26 → TX_EN
+//   IO27 ← RX_CLK   IO28 ← RXD0   IO29 ← RXD1   IO30 ← RXD2   IO31 ← RXD3
+// (← = input to FPGA from PHY, → = output from FPGA to PHY)
+// ─────────────────────────────────────────────────────────────────────────────
 
-IO_LOC "p0_txd[0]"  26;
-IO_LOC "p0_txd[1]"  27;
-IO_LOC "p0_txd[2]"  28;
-IO_LOC "p0_txd[3]"  29;
-IO_PORT "p0_txd[0]"  IO_TYPE=LVCMOS33 DRIVE=8;
-IO_PORT "p0_txd[1]"  IO_TYPE=LVCMOS33 DRIVE=8;
-IO_PORT "p0_txd[2]"  IO_TYPE=LVCMOS33 DRIVE=8;
-IO_PORT "p0_txd[3]"  IO_TYPE=LVCMOS33 DRIVE=8;
+// TX_CLK: PHY output → FPGA clock input (25 MHz @ 100 Mbps)
+// Placed on GCLKT_1 (IOT40A) for global clock routing
+IO_LOC "p0_tx_clk"  73;
+IO_PORT "p0_tx_clk" PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
-IO_LOC "p0_tx_en"   30;
+// TXD[3:0]: FPGA drives nibble data to PHY on rising edge of TX_CLK
+IO_LOC "p0_txd[0]"  74;
+IO_LOC "p0_txd[1]"  75;
+IO_LOC "p0_txd[2]"  77;
+IO_LOC "p0_txd[3]"  25;
+IO_PORT "p0_txd[0]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "p0_txd[1]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "p0_txd[2]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "p0_txd[3]" IO_TYPE=LVCMOS33 DRIVE=8;
+
+// TX_EN: FPGA drives high when TXD contains valid data
+IO_LOC "p0_tx_en"   26;
 IO_PORT "p0_tx_en"  IO_TYPE=LVCMOS33 DRIVE=8;
 
-IO_LOC "p0_tx_er"   31;
-IO_PORT "p0_tx_er"  IO_TYPE=LVCMOS33;
+// RX_CLK: PHY output → FPGA (25 MHz @ 100 Mbps)
+IO_LOC "p0_rx_clk"  27;
+IO_PORT "p0_rx_clk" PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
-// RX path (PHY drives, referenced to PHY RX_CLK)
-IO_LOC "p0_rx_clk"  32;
-IO_PORT "p0_rx_clk"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
+// RXD[3:0]: PHY drives received nibble on rising edge of RX_CLK
+IO_LOC "p0_rxd[0]"  28;
+IO_LOC "p0_rxd[1]"  29;
+IO_LOC "p0_rxd[2]"  30;
+IO_LOC "p0_rxd[3]"  31;
+IO_PORT "p0_rxd[0]" PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "p0_rxd[1]" PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "p0_rxd[2]" PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "p0_rxd[3]" PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
-IO_LOC "p0_rxd[0]"  33;
-IO_LOC "p0_rxd[1]"  34;
-IO_LOC "p0_rxd[2]"  35;
-IO_LOC "p0_rxd[3]"  36;
-IO_PORT "p0_rxd[0]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-IO_PORT "p0_rxd[1]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-IO_PORT "p0_rxd[2]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-IO_PORT "p0_rxd[3]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "p0_rx_dv"   37;
-IO_PORT "p0_rx_dv"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "p0_rx_er"   38;
-IO_PORT "p0_rx_er"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-// Management
-IO_LOC "p0_mdc"     39;
-IO_PORT "p0_mdc"    IO_TYPE=LVCMOS33 DRIVE=4;
-
-IO_LOC "p0_mdio"    40;
-IO_PORT "p0_mdio"   IO_TYPE=LVCMOS33 DRIVE=4;
-
-IO_LOC "p0_rst_n"   41;
-IO_PORT "p0_rst_n"  IO_TYPE=LVCMOS33 DRIVE=8;
-
-// ── PHY1 MII (DP83848 #2 — Port 1, optional downstream) ─────────────────
-IO_LOC "p1_tx_clk"  42;
-IO_PORT "p1_tx_clk"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "p1_txd[0]"  43;
-IO_LOC "p1_txd[1]"  44;
-IO_LOC "p1_txd[2]"  45;
-IO_LOC "p1_txd[3]"  46;
-IO_PORT "p1_txd[0]"  IO_TYPE=LVCMOS33 DRIVE=8;
-IO_PORT "p1_txd[1]"  IO_TYPE=LVCMOS33 DRIVE=8;
-IO_PORT "p1_txd[2]"  IO_TYPE=LVCMOS33 DRIVE=8;
-IO_PORT "p1_txd[3]"  IO_TYPE=LVCMOS33 DRIVE=8;
-
-IO_LOC "p1_tx_en"   47;
-IO_PORT "p1_tx_en"  IO_TYPE=LVCMOS33 DRIVE=8;
-
-IO_LOC "p1_tx_er"   48;
-IO_PORT "p1_tx_er"  IO_TYPE=LVCMOS33;
-
-IO_LOC "p1_rx_clk"  49;
-IO_PORT "p1_rx_clk"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "p1_rxd[0]"  50;
-IO_LOC "p1_rxd[1]"  51;
-IO_LOC "p1_rxd[2]"  52;
-IO_LOC "p1_rxd[3]"  53;
-IO_PORT "p1_rxd[0]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-IO_PORT "p1_rxd[1]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-IO_PORT "p1_rxd[2]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-IO_PORT "p1_rxd[3]"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "p1_rx_dv"   54;
-IO_PORT "p1_rx_dv"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "p1_rx_er"   55;
-IO_PORT "p1_rx_er"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "p1_mdc"     56;
-IO_PORT "p1_mdc"    IO_TYPE=LVCMOS33 DRIVE=4;
-
-IO_LOC "p1_mdio"    57;
-IO_PORT "p1_mdio"   IO_TYPE=LVCMOS33 DRIVE=4;
-
-IO_LOC "p1_rst_n"   58;
-IO_PORT "p1_rst_n"  IO_TYPE=LVCMOS33 DRIVE=8;
-
-// ── SPI slave (to ESP32 DevKit V4) ───────────────────────────────────────
-// ESP32: SCLK=GPIO14, MOSI=GPIO13, MISO=GPIO12, CS=GPIO15, INT=GPIO4
-IO_LOC "spi_sck"    73;
-IO_PORT "spi_sck"   PULL_MODE=DOWN IO_TYPE=LVCMOS33;
-
-IO_LOC "spi_mosi"   72;
-IO_PORT "spi_mosi"  PULL_MODE=DOWN IO_TYPE=LVCMOS33;
-
-IO_LOC "spi_miso"   71;
-IO_PORT "spi_miso"  IO_TYPE=LVCMOS33 DRIVE=8;
-
-IO_LOC "spi_cs_n"   74;
-IO_PORT "spi_cs_n"  PULL_MODE=UP IO_TYPE=LVCMOS33;
-
-IO_LOC "spi_int_n"  75;
-IO_PORT "spi_int_n" IO_TYPE=LVCMOS33 DRIVE=4;
-
-// ── I2C to AT24C256 EEPROM ───────────────────────────────────────────────
-// External 4.7 kΩ pull-ups required on SCL and SDA
-IO_LOC "i2c_scl"    76;
-IO_PORT "i2c_scl"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-IO_LOC "i2c_sda"    77;
-IO_PORT "i2c_sda"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
-
-// ── Status LEDs (active-low on Tang Nano 20K) ────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Onboard LEDs (active-low; no external wiring required)
+// ─────────────────────────────────────────────────────────────────────────────
 IO_LOC "led_n[0]"   15;
 IO_LOC "led_n[1]"   16;
 IO_LOC "led_n[2]"   17;
@@ -155,3 +83,66 @@ IO_PORT "led_n[2]"  IO_TYPE=LVCMOS33 DRIVE=8;
 IO_PORT "led_n[3]"  IO_TYPE=LVCMOS33 DRIVE=8;
 IO_PORT "led_n[4]"  IO_TYPE=LVCMOS33 DRIVE=8;
 IO_PORT "led_n[5]"  IO_TYPE=LVCMOS33 DRIVE=8;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RIGHT SIDE (J3) — PHY0 management + RX status + SPI + I2C
+//
+// Top of right header (IO41-IO51): PHY0 remaining signals
+//   IO41 ← RX_DV    IO42 ← RX_ER
+//   IO48 → MDC      IO49 ↔ MDIO (open-drain; 2.2 kΩ pull-up to 3.3V REQUIRED)
+//   IO51 → RST_N    (10 kΩ pull-up to 3.3V recommended)
+//
+// Middle of right header (IO52-IO56): SPI to ESP32
+//   IO52 ← SCK      IO53 ← MOSI    IO54 → MISO
+//   IO55 ← CS_N     IO56 → INT_N   (10 kΩ pull-up to 3.3V recommended)
+//
+// Bottom of right header (IO71-IO72): I2C to AT24C256
+//   IO71 → SCL      IO72 ↔ SDA
+//   (4.7 kΩ pull-ups on SCL and SDA to 3.3V REQUIRED)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// RX_DV: PHY drives high when RXD contains valid received data
+IO_LOC "p0_rx_dv"   41;
+IO_PORT "p0_rx_dv"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
+// RX_ER: PHY drives high to signal a receive coding error
+IO_LOC "p0_rx_er"   42;
+IO_PORT "p0_rx_er"  PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
+// MDC: management data clock (FPGA drives, max 2.5 MHz)
+IO_LOC "p0_mdc"     48;
+IO_PORT "p0_mdc"    IO_TYPE=LVCMOS33 DRIVE=4;
+
+// MDIO: management data I/O (open-drain, 2.2 kΩ pull-up to 3.3V REQUIRED)
+IO_LOC "p0_mdio"    49;
+IO_PORT "p0_mdio"   IO_TYPE=LVCMOS33 DRIVE=4;
+
+// RST_N: active-low PHY hardware reset (10 kΩ pull-up recommended)
+IO_LOC "p0_rst_n"   51;
+IO_PORT "p0_rst_n"  IO_TYPE=LVCMOS33 DRIVE=8;
+
+// ── SPI slave (to ESP32 DevKit V4) ───────────────────────────────────────────
+// ESP32: SCLK=GPIO14, MOSI=GPIO13, MISO=GPIO12, CS=GPIO15, INT=GPIO4
+IO_LOC "spi_sck"    52;
+IO_PORT "spi_sck"   PULL_MODE=DOWN IO_TYPE=LVCMOS33;
+
+IO_LOC "spi_mosi"   53;
+IO_PORT "spi_mosi"  PULL_MODE=DOWN IO_TYPE=LVCMOS33;
+
+IO_LOC "spi_miso"   54;
+IO_PORT "spi_miso"  IO_TYPE=LVCMOS33 DRIVE=8;
+
+IO_LOC "spi_cs_n"   55;
+IO_PORT "spi_cs_n"  PULL_MODE=UP IO_TYPE=LVCMOS33;
+
+// INT_N: FPGA → ESP32 interrupt, active-low (10 kΩ pull-up to 3.3V recommended)
+IO_LOC "spi_int_n"  56;
+IO_PORT "spi_int_n" IO_TYPE=LVCMOS33 DRIVE=4;
+
+// ── I2C master (to AT24C256 ESI EEPROM) ──────────────────────────────────────
+// 4.7 kΩ pull-ups on SCL and SDA to 3.3V are REQUIRED for I2C operation.
+IO_LOC "i2c_scl"    71;
+IO_PORT "i2c_scl"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
+IO_LOC "i2c_sda"    72;
+IO_PORT "i2c_sda"   PULL_MODE=NONE IO_TYPE=LVCMOS33;

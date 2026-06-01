@@ -60,6 +60,16 @@ RUN add-apt-repository ppa:deadsnakes/ppa && \
     python3.12 python3.12-venv python3.12-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# --- iverilog + simulation / agent test deps (also installed by setup.sh, but bake
+#     in here so the image is self-contained for CI and offline use) ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    iverilog gtkwave \
+    openocd \
+    libpcap-dev \
+    libgtest-dev \
+    libusb-1.0-0-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # --- apio (FPGA toolchain) ---
 RUN pip3 install --no-cache-dir apio
 

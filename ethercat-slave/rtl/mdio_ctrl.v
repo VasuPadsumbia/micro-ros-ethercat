@@ -1,102 +1,77 @@
 // ============================================================================
-// mdio_ctrl.v — MDIO controller for DP83848 PHY configuration
+// mdio_ctrl.v — MDIO controller for DP83848 PHY0 configuration
 //
-// On reset, sequences through a PHY init table (both PHY0 and PHY1):
-//   - Force 100BASE-TX full-duplex
-//   - Enable auto-negotiation (optional; kept off for deterministic timing)
+// On reset, sequences through a PHY init table (PHY0 only):
+//   - Force 100BASE-TX full-duplex, no auto-negotiation
+//   - Configure PHY LED mode
 //
-// MDC period = 2 * MDC_DIV * sys_clk period  (target: ≤ 2.5 MHz per IEEE 802.3)
-// With 27 MHz sys_clk and MDC_DIV=6: MDC ≈ 2.25 MHz
+// MDC frequency = sys_clk / (2 * MDC_DIV).
+// IEEE 802.3 max MDC = 2.5 MHz.  With 27 MHz and MDC_DIV=6 → 2.25 MHz.
 //
-// Interface:
-//   init_done — goes high after all init writes complete
-//   mdc[1:0]  — MDC clocks (one per PHY)
-//   mdio_oe   — drive MDIO line (SDA) when set
-//   mdio_out  — MDIO output bit
-//   mdio_in   — MDIO input bit (for reads)
+// MDIO is open-drain.  Drive open (tristate) when releasing; let the 2.2 kΩ
+// external pull-up pull it high.  Never drive it high from the FPGA.
+//
+// PHY address: set PHY0_ADDR in slave_config.vh to match your module's
+// PHYAD[4:0] strap resistors.
 // ============================================================================
+`include "slave_config.vh"
+
 module mdio_ctrl #(
-    parameter MDC_DIV = 6   // sys_clk / (2*MDC_DIV) = MDC freq
+    parameter MDC_DIV = `MDC_DIV
 ) (
-    input  wire       clk,
-    input  wire       rst_n,
+    input  wire  clk,
+    input  wire  rst_n,
+    output reg   init_done,
 
-    output reg        init_done,
-
-    // PHY 0
-    output wire       mdc0,
-    output reg        mdio0_oe,
-    output reg        mdio0_out,
-    input  wire       mdio0_in,
-
-    // PHY 1
-    output wire       mdc1,
-    output reg        mdio1_oe,
-    output reg        mdio1_out,
-    input  wire       mdio1_in
+    // Single PHY (PHY0)
+    output wire  mdc,
+    output reg   mdio_oe,   // 1 = drive MDIO, 0 = tristate (release)
+    output reg   mdio_out,  // bit to transmit when mdio_oe=1
+    input  wire  mdio_in    // sampled MDIO pin (for reads, not used in init)
 );
 
     // ── MDC generation ────────────────────────────────────────────────────
     reg [$clog2(MDC_DIV)-1:0] div_cnt;
-    reg                        mdc_r;
-    reg                        mdc_rise;   // one-cycle pulse at MDC rising edge
-    reg                        mdc_fall;   // one-cycle pulse at MDC falling edge
+    reg mdc_r, mdc_rise, mdc_fall;
 
-    assign mdc0 = mdc_r;
-    assign mdc1 = mdc_r;
+    assign mdc = mdc_r;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             div_cnt  <= 0;
-            mdc_r    <= 0;
-            mdc_rise <= 0;
-            mdc_fall <= 0;
+            mdc_r    <= 1'b0;
+            mdc_rise <= 1'b0;
+            mdc_fall <= 1'b0;
         end else begin
-            mdc_rise <= 0;
-            mdc_fall <= 0;
+            mdc_rise <= 1'b0;
+            mdc_fall <= 1'b0;
             if (div_cnt == MDC_DIV[$clog2(MDC_DIV)-1:0] - 1) begin
                 div_cnt <= 0;
                 mdc_r   <= ~mdc_r;
-                if (!mdc_r) mdc_rise <= 1;
-                else        mdc_fall <= 1;
+                if (!mdc_r) mdc_rise <= 1'b1;
+                else        mdc_fall <= 1'b1;
             end else begin
                 div_cnt <= div_cnt + 1;
             end
         end
     end
 
-    // ── Init table: {phy_sel[0], regaddr[4:0], data[15:0]} ───────────────
-    // phy_sel: 0 = PHY0, 1 = PHY1, 2 = both
-    // Uses write (no read needed for init)
-    //
-    // DP83848 register map (relevant):
-    //   Reg 0x00: BMCR — Basic Mode Control
-    //     bit15 = reset, bit13 = speed (1=100), bit8 = duplex (1=FD), bit12 = ANE
-    //   Reg 0x10: PHYCR — PHY Control
-    //
-    localparam INIT_LEN = 4;
-    reg [22:0] init_table [0:INIT_LEN-1];
-    // {phy_sel[1:0], regaddr[4:0], data[15:0]}
+    // ── Init table: {regaddr[4:0], data[15:0]} ───────────────────────────
+    // BMCR (reg 0x00) = 0x2100: 100 Mbps, Full-Duplex, no autoneg
+    //   bit13=1 (speed=100), bit8=1 (FD), bit12=0 (AN off)
+    // PHYCR (reg 0x19) = 0x0001: LED mode bits
+    localparam INIT_LEN = 2;
+    reg [20:0] init_table [0:INIT_LEN-1]; // {regaddr[4:0], data[15:0]}
+
     initial begin
-        // PHY0: BMCR = 0x2100 (100Mbps, Full-duplex, no AN)
-        init_table[0] = {2'd0, 5'h00, 16'h2100};
-        // PHY1: BMCR = 0x2100
-        init_table[1] = {2'd1, 5'h00, 16'h2100};
-        // PHY0: PHYCR set LED mode (optional)
-        init_table[2] = {2'd0, 5'h19, 16'h0001};
-        // PHY1: same
-        init_table[3] = {2'd1, 5'h19, 16'h0001};
+        init_table[0] = {5'h00, 16'h2100}; // BMCR: 100BASE-TX FD
+        init_table[1] = {5'h19, 16'h0001}; // PHYCR: LED cfg
     end
 
-    // ── MDIO frame: 32 preamble + ST + OP + PA5 + RA5 + TA + DATA16
-    // Write frame: 1_1_01_PADDR_RADDR_10_DATA (total 32 bits payload)
-    // ────────────────────────────────────────────────────────────────────
+    // ── MDIO write frame format (IEEE 802.3, clause 22) ──────────────────
+    // 32×1 preamble | ST=01 | OP=01 | PADDR[4:0] | RADDR[4:0] | TA=10 | DATA[15:0]
     localparam PREAMBLE_LEN = 32;
-    localparam FRAME_LEN    = 32;   // ST(2)+OP(2)+PA(5)+RA(5)+TA(2)+DATA(16)
-
-    // PHY addresses: PHY0 = 0, PHY1 = 1 (set by HW strapping on DP83848)
-    localparam PHY0_ADDR = 5'd0;
-    localparam PHY1_ADDR = 5'd1;
+    localparam FRAME_LEN    = 32;
 
     reg [5:0]  bit_cnt;
     reg [31:0] shift_out;
@@ -107,80 +82,63 @@ module mdio_ctrl #(
     localparam ST_DONE     = 2'd2;
 
     reg [1:0] state;
-    reg       current_phy;   // 0 = PHY0, 1 = PHY1
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state      <= ST_PREAMBLE;
-            init_done  <= 0;
-            init_idx   <= 0;
-            bit_cnt    <= PREAMBLE_LEN - 1;
-            mdio0_oe   <= 1;
-            mdio0_out  <= 1;
-            mdio1_oe   <= 1;
-            mdio1_out  <= 1;
-            current_phy <= 0;
-            shift_out  <= 0;
+            state     <= ST_PREAMBLE;
+            init_done <= 1'b0;
+            init_idx  <= 5'd0;
+            bit_cnt   <= PREAMBLE_LEN - 1;
+            mdio_oe   <= 1'b1;
+            mdio_out  <= 1'b1;
+            shift_out <= 32'd0;
         end else if (!init_done && mdc_fall) begin
             case (state)
 
             ST_PREAMBLE: begin
-                // Drive MDIO = 1 for 32 cycles (preamble)
-                mdio0_oe  <= 1; mdio0_out <= 1;
-                mdio1_oe  <= 1; mdio1_out <= 1;
-                if (bit_cnt == 0) begin
-                    // Load frame for current init entry
+                mdio_oe  <= 1'b1;
+                mdio_out <= 1'b1;   // preamble = all 1s
+                if (bit_cnt == 6'd0) begin
                     begin : load_frame
-                        reg [1:0]  phy_sel;
                         reg [4:0]  reg_addr;
                         reg [15:0] wr_data;
-                        reg [4:0]  phy_addr;
-                        {phy_sel, reg_addr, wr_data} = init_table[init_idx];
-                        phy_addr = (phy_sel == 2'd0) ? PHY0_ADDR : PHY1_ADDR;
-                        current_phy = phy_sel[0];
-                        // Build 32-bit MDIO write frame
-                        shift_out = {2'b01,     // ST
-                                     2'b01,     // OP = write
-                                     phy_addr,  // PADDR
-                                     reg_addr,  // RADDR
-                                     2'b10,     // TA (turnaround)
-                                     wr_data};  // DATA
+                        {reg_addr, wr_data} = init_table[init_idx];
+                        shift_out = {2'b01,         // ST
+                                     2'b01,         // OP = write
+                                     `PHY0_ADDR,    // PADDR
+                                     reg_addr,      // RADDR
+                                     2'b10,         // TA
+                                     wr_data};      // DATA
                     end
                     bit_cnt <= FRAME_LEN - 1;
                     state   <= ST_FRAME;
                 end else begin
-                    bit_cnt <= bit_cnt - 1;
+                    bit_cnt <= bit_cnt - 1'b1;
                 end
             end
 
             ST_FRAME: begin
-                // Shift out MSB first
-                if (!current_phy) begin
-                    mdio0_oe  <= 1; mdio0_out <= shift_out[31];
-                    mdio1_oe  <= 0; mdio1_out <= 0;
-                end else begin
-                    mdio1_oe  <= 1; mdio1_out <= shift_out[31];
-                    mdio0_oe  <= 0; mdio0_out <= 0;
-                end
+                mdio_oe  <= 1'b1;
+                mdio_out <= shift_out[31];
                 shift_out <= {shift_out[30:0], 1'b0};
-
-                if (bit_cnt == 0) begin
+                if (bit_cnt == 6'd0) begin
                     if (init_idx == INIT_LEN - 1) begin
                         state     <= ST_DONE;
-                        init_done <= 1;
+                        init_done <= 1'b1;
+                        mdio_oe   <= 1'b0; // release MDIO
                     end else begin
-                        init_idx <= init_idx + 1;
+                        init_idx <= init_idx + 5'd1;
                         bit_cnt  <= PREAMBLE_LEN - 1;
                         state    <= ST_PREAMBLE;
                     end
                 end else begin
-                    bit_cnt <= bit_cnt - 1;
+                    bit_cnt <= bit_cnt - 1'b1;
                 end
             end
 
             ST_DONE: begin
-                mdio0_oe <= 0; mdio1_oe <= 0;
-                init_done <= 1;
+                mdio_oe   <= 1'b0; // tristate — pull-up holds MDIO high
+                init_done <= 1'b1;
             end
 
             endcase

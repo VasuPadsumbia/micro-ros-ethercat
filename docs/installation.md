@@ -73,12 +73,22 @@ docker compose down
 
 ### First-run inside the container
 
-After the container starts (either method), open a terminal and run:
+The `postCreateCommand` in `devcontainer.json` runs `bash setup.sh` automatically.
+This is a **one-time** operation (~60 min) that:
+
+1. Clones ESP-IDF v5.3 and installs the Xtensa toolchain (~10 min)
+2. Clones the micro-ROS ESP-IDF component and runs the colcon cross-compilation
+   build for all micro-ROS packages including `rcl`, `rclc`, `std_msgs` (~45 min)
+3. Installs apio oss-cad-suite packages (Yosys, nextpnr-gowin)
+4. Creates the Python venv
+
+After setup completes, activate the venv:
 
 ```bash
-bash setup.sh          # ~15 min on first run
 source .venv/bin/activate
 ```
+
+Subsequent container starts are instant — setup is skipped if already done.
 
 From this point the [Quick Start](#quick-start) steps apply normally.
 
@@ -169,40 +179,67 @@ source .venv/bin/activate
 
 ### 2. Hardware Wiring
 
-#### SPI (ESP32 ↔ Tang Nano 20K)
-| ESP32 Pin | Tang Nano Pin | Signal |
-|-----------|---------------|--------|
-| GPIO14    | FPGA pin 63   | SPI_SCK |
-| GPIO13    | FPGA pin 64   | SPI_MOSI |
-| GPIO12    | FPGA pin 65   | SPI_MISO |
-| GPIO15    | FPGA pin 66   | SPI_CS_N |
-| GPIO4     | FPGA pin 67   | INT_N (active-low) |
-| GND       | GND           | Ground |
-| 3.3V      | 3.3V          | Power |
+> Full circuit diagrams, exact pin numbers, and resistor requirements are in
+> **[docs/wiring.md](wiring.md)**.  The tables below are a quick reference.
 
-#### I2C (Tang Nano 20K ↔ AT24C256)
-| Tang Nano Pin | AT24C256 | Signal |
-|---------------|----------|--------|
-| FPGA pin 68   | Pin 6 (SCL) | I2C_SCL |
-| FPGA pin 69   | Pin 5 (SDA) | I2C_SDA |
-| GND           | Pin 4 (GND) | Ground |
-| 3.3V          | Pin 8 (VCC) | Power |
-| —             | Pins 1,2,3 (A0,A1,A2) | Tie to GND → addr 0x50 |
+#### SPI (ESP32 ↔ Tang Nano 20K — RIGHT header)
+| ESP32 Pin | FPGA IO | Signal |
+|-----------|---------|--------|
+| GPIO14    | IO52    | SPI_SCK |
+| GPIO13    | IO53    | SPI_MOSI |
+| GPIO12    | IO54    | SPI_MISO |
+| GPIO15    | IO55    | SPI_CS_N |
+| GPIO4     | IO56    | INT_N (active-low) |
+| GND       | GND     | Ground |
+| 3.3V      | 3.3V    | Power |
 
-**Pull-ups:** 4.7 kΩ resistors from SCL and SDA to 3.3V.
+**Resistor:** 10 kΩ pull-up from INT_N to 3.3V (strongly recommended).
 
-#### MII (Tang Nano 20K ↔ DP83848)
-Connect DP83848 #1 (Port 0) to Tang Nano per MII standard:
-- TXD[3:0], TXEN, TX_CLK → FPGA inputs/outputs (see constraints)
-- RXD[3:0], RXDV, RX_CLK, RX_ER → FPGA inputs
-- MDC, MDIO → FPGA outputs (bidirectional MDIO)
-- RST_N → FPGA output
-- 2.2 kΩ pull-ups on MDC and MDIO to 3.3V
+#### I2C (Tang Nano 20K ↔ AT24C256 — RIGHT header)
+| FPGA IO | AT24C256 | Signal |
+|---------|----------|--------|
+| IO71    | Pin 6 (SCL) | I2C_SCL |
+| IO72    | Pin 5 (SDA) | I2C_SDA |
+| GND     | Pin 4 (GND) | Ground |
+| 3.3V    | Pin 8 (VCC) | Power |
+| GND     | Pins 1,2,3 (A0,A1,A2) | Tie to GND → I2C addr 0x50 |
+| GND     | Pin 7 (WP) | Tie to GND (write enabled) |
 
-**Decoupling:** 100 nF capacitors close to each DP83848 VCC pin.
+**Resistors:** 4.7 kΩ from SCL to 3.3V and 4.7 kΩ from SDA to 3.3V — **MANDATORY**.
+
+#### MII (Tang Nano 20K ↔ DP83848 module)
+
+**LEFT header** — high-speed MII data:
+| FPGA IO | DP83848 | Direction | Signal |
+|---------|---------|-----------|--------|
+| IO73    | TX_CLK  | PHY→FPGA  | 25 MHz TX clock |
+| IO74    | TXD0    | FPGA→PHY  | TX nibble bit 0 |
+| IO75    | TXD1    | FPGA→PHY  | TX nibble bit 1 |
+| IO77    | TXD2    | FPGA→PHY  | TX nibble bit 2 |
+| IO25    | TXD3    | FPGA→PHY  | TX nibble bit 3 |
+| IO26    | TX_EN   | FPGA→PHY  | Transmit enable |
+| IO27    | RX_CLK  | PHY→FPGA  | 25 MHz RX clock |
+| IO28    | RXD0    | PHY→FPGA  | RX nibble bit 0 |
+| IO29    | RXD1    | PHY→FPGA  | RX nibble bit 1 |
+| IO30    | RXD2    | PHY→FPGA  | RX nibble bit 2 |
+| IO31    | RXD3    | PHY→FPGA  | RX nibble bit 3 |
+
+**RIGHT header** — management + RX status:
+| FPGA IO | DP83848 | Direction | Signal |
+|---------|---------|-----------|--------|
+| IO41    | RX_DV   | PHY→FPGA  | Receive data valid |
+| IO42    | RX_ER   | PHY→FPGA  | Receive error |
+| IO48    | MDC     | FPGA→PHY  | MDIO clock |
+| IO49    | MDIO    | Bidir     | MDIO data (open-drain) |
+| IO51    | RESET_N | FPGA→PHY  | Active-low reset |
+
+**Resistors:**
+- 2.2 kΩ from MDIO to 3.3V — **MANDATORY** (check if already on your module)
+- 10 kΩ from RESET_N to 3.3V — strongly recommended
+- TX_ER → tie to **GND** on module side (not connected to FPGA)
 
 #### Ethernet (PC ↔ Tang Nano Port 0)
-Standard Cat5e cable from PC Ethernet port to RJ45 of DP83848 #1.
+Cat5e cable from PC NIC to the RJ45 on the DP83848 module.
 
 ### 3. Build FPGA Bitstream
 
