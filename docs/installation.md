@@ -1,5 +1,103 @@
 # Installation Guide
 
+## Dev Container Setup (Recommended)
+
+The repository ships with a pre-configured dev container that eliminates manual
+tool installation for everything except ESP-IDF and the micro-ROS component
+(which must be fetched from the internet at first use).
+
+### What is pre-installed
+
+| Tool | Version | Notes |
+|------|---------|-------|
+| Ubuntu | 22.04 | Base image |
+| ROS 2 | Humble (desktop) | `source /opt/ros/humble/setup.bash` runs automatically |
+| CMake / Ninja | system | plus GCC, G++, Clang |
+| Python | 3.12 + 3.10 | deadsnakes PPA |
+| Rust | stable | via rustup |
+| Node.js | 20 | via NodeSource |
+| Claude Code CLI | latest | `claude` command available |
+| apio | latest | FPGA toolchain frontend |
+| openFPGALoader | HEAD | Tang Nano 20K programmer |
+| code-server | latest | browser VS Code on port 8888 |
+
+`bash setup.sh` is still required once inside the container to download:
+- ESP-IDF v5.3 + Xtensa toolchain (`tools/esp-idf/`)
+- micro-ROS ESP-IDF component (`firmware/components/`)
+- SOEM submodule (`agent/soem/`)
+- apio oss-cad-suite packages (Yosys, nextpnr-gowin)
+- Python venv (`.venv/`)
+
+### Option A: VS Code Dev Container
+
+Requirements: [Docker Desktop](https://docs.docker.com/get-docker/) and the
+[Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+VS Code extension.
+
+```bash
+git clone git@github.com:VasuPadsumbia/micro-ros-ethercat.git
+cd micro-ros-ethercat
+code .
+```
+
+VS Code will detect `.devcontainer/devcontainer.json` and prompt
+**"Reopen in Container"** — click it. The image builds once (~10 min on first
+run) and opens with all extensions pre-installed. The `postCreateCommand`
+automatically sources ROS 2.
+
+Set `ANTHROPIC_API_KEY` in your host environment before opening the container;
+`devcontainer.json` forwards it as `remoteEnv`.
+
+### Option B: Docker Compose (browser VS Code)
+
+Use this when you don't have VS Code installed locally or want the full IDE in
+a browser tab.
+
+```bash
+git clone git@github.com:VasuPadsumbia/micro-ros-ethercat.git
+cd micro-ros-ethercat
+
+# Pass your Anthropic key (optional — only needed for Claude Code)
+export ANTHROPIC_API_KEY=<your-key>
+
+docker compose up --build -d
+```
+
+Then open **http://localhost:8888** in any browser. The workspace is
+live-mounted so edits in the browser IDE are immediately reflected on disk.
+
+Stop the container:
+```bash
+docker compose down
+```
+
+### First-run inside the container
+
+After the container starts (either method), open a terminal and run:
+
+```bash
+bash setup.sh          # ~15 min on first run
+source .venv/bin/activate
+```
+
+From this point the [Quick Start](#quick-start) steps apply normally.
+
+### USB / hardware access
+
+The container runs with `--privileged` and `SYS_PTRACE` so USB devices
+(Tang Nano 20K via openFPGALoader, ESP32 via `/dev/ttyUSB*`) are
+accessible without extra configuration on Linux and WSL 2.
+
+On macOS with Docker Desktop, USB passthrough requires
+[Docker USB passthrough](https://github.com/dorssel/usbipd-win) or
+flashing from the host instead.
+
+---
+
+## Native / Bare-Metal Setup
+
+Follow this path if you prefer not to use Docker.
+
 ## Prerequisites
 
 ### Hardware
@@ -20,6 +118,9 @@
 - cmake, ninja-build
 - gcc, g++ (for agent)
 - iverilog (for FPGA simulation)
+
+> **Tip:** All of the above are pre-installed in the dev container.
+> See [Dev Container Setup](#dev-container-setup-recommended) to skip this section.
 
 ## Quick Start
 

@@ -62,6 +62,37 @@ micro-ros-ethercat/
 
 ## Quick start
 
+### Option A — Dev Container (recommended)
+
+Requires [Docker](https://docs.docker.com/get-docker/) and either VS Code with the
+[Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+extension, or just Docker Compose for a fully browser-based experience.
+
+**VS Code Dev Container:**
+```bash
+git clone git@github.com:VasuPadsumbia/micro-ros-ethercat.git
+cd micro-ros-ethercat
+code .          # then click "Reopen in Container" when prompted
+```
+
+**Docker Compose (browser VS Code at http://localhost:8888):**
+```bash
+git clone git@github.com:VasuPadsumbia/micro-ros-ethercat.git
+cd micro-ros-ethercat
+ANTHROPIC_API_KEY=<your-key> docker compose up --build -d
+# open http://localhost:8888 in your browser
+```
+
+Pre-installed in the container: ROS 2 Humble, CMake/GCC/Clang, Python 3.12, Rust,
+Node.js 20, Claude Code CLI, apio, openFPGALoader, code-server.
+
+Inside the container, run `bash setup.sh` once to fetch ESP-IDF, the micro-ROS
+component, SOEM, and the apio oss-cad-suite packages.
+
+---
+
+### Option B — Native (Ubuntu 22.04 / 24.04)
+
 ### 1. Clone
 
 ```bash

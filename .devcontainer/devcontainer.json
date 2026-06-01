@@ -1,0 +1,44 @@
+{
+  "name": "micro-ROS EtherCAT",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+
+  "remoteEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Anthropic.claude-code",
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "rust-lang.rust-analyzer",
+        "ms-python.python",
+        "ms-python.pylance",
+        "ajshort.ros",
+        "twxs.cmake",
+        "marus25.cortex-debug"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "C_Cpp.default.compilerPath": "/usr/bin/g++",
+        "C_Cpp.default.cppStandard": "c++17",
+        "rust-analyzer.cargo.allFeatures": true,
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "ros.distro": "humble",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+
+  "postCreateCommand": "bash -c 'source /opt/ros/humble/setup.bash 2>/dev/null || echo \"ROS setup skipped\"; echo Dev container ready!'",
+
+  "forwardPorts": [8888],
+  "portsAttributes": {
+    "8888": { "label": "VS Code Browser" }
+  }
+}

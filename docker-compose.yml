@@ -1,0 +1,31 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    image: ros2-ethercat-dev:latest
+    container_name: ros2-ethercat-dev
+    restart: unless-stopped
+    ports:
+      - "8888:8888"         # VS Code in browser → http://localhost:8888
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - .:/workspace         # project source live-mounted
+      - ~/.ssh:/root/.ssh:ro # SSH keys for git
+    privileged: true         # USB (Tang Nano) + KVM (QEMU)
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        code-server --bind-addr 0.0.0.0:8888 --auth none --disable-telemetry /workspace
+      "
+
+    # ── GPU (Windows/WSL2): automatic via virtio-gpu, nothing needed ──────────
+    # Linux AMD/Intel — uncomment:
+    # devices:
+    #   - /dev/dri:/dev/dri
+    #   - /dev/bus/usb:/dev/bus/usb

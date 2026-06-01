@@ -1,5 +1,69 @@
 # User Guide
 
+## Dev Container Environment
+
+### Accessing the IDE
+
+| Method | How to open |
+|--------|-------------|
+| VS Code Dev Container | Open the cloned folder in VS Code; click **Reopen in Container** |
+| Browser (Docker Compose) | `docker compose up -d`, then navigate to **http://localhost:8888** |
+
+### Shell aliases
+
+The following aliases are set in `/root/.bashrc` for convenience:
+
+| Alias | Expands to |
+|-------|-----------|
+| `cb` | `cd /workspace && colcon build --symlink-install` |
+| `ct` | `cd /workspace && colcon test` |
+| `cs` | `source /workspace/install/setup.bash` |
+
+ROS 2 Humble is sourced automatically on every new shell:
+```bash
+source /opt/ros/humble/setup.bash
+```
+
+### Claude Code CLI
+
+`claude` is available in the container terminal (installed globally via npm).
+Set `ANTHROPIC_API_KEY` in your host environment before starting the container;
+it is forwarded automatically by both `devcontainer.json` and `docker-compose.yml`.
+
+```bash
+claude          # interactive session
+claude "explain the SPI transport layer"
+```
+
+### Exposed ports
+
+| Port | Service |
+|------|---------|
+| 8888 | code-server (browser VS Code) — Docker Compose only |
+
+### Workspace mount
+
+The project root is mounted at `/workspace` with full read-write access.
+All build artefacts (`agent/build/`, `.venv/`, `tools/`) are written inside
+the container at `/workspace/` and appear on the host as well.
+
+### Hardware (USB) inside the container
+
+The container is started with `--privileged` so USB devices are visible:
+
+```bash
+ls /dev/ttyUSB*    # ESP32 serial
+lsusb              # Tang Nano 20K should appear as JTAG device
+```
+
+Flash commands work unchanged:
+```bash
+./run.sh --run flash-slave
+./run.sh --run flash-firmware --port /dev/ttyUSB0
+```
+
+---
+
 ## run.sh — Project Orchestrator
 
 All project operations are driven from `run.sh` in the workspace root.
